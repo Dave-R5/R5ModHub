@@ -160,6 +160,7 @@
     <select id="zoneKind">
       <option value="chat">Chat (lezen en modereren)</option>
       <option value="stream">Streamweergave (video)</option>
+      <option value="both">Stream én chat (video met chat ernaast)</option>
     </select>
     <div id="zoneNameWrap">
     <label for="zoneName">Kanaalnaam (zoals in twitch.tv/<b>naam</b>)</label>
@@ -660,6 +661,7 @@
   }
 
   function addZone(name, kind) {
+    if (kind === 'both') { addZone(name, 'stream'); return addZone(name, 'chat'); }
     if (kind === 'buttons') name = 'knoppen';
     const ch = name.trim().toLowerCase().replace(/^.*twitch\.tv\//, '').replace(/[^a-z0-9_]/g, '');
     if (!ch) return toast('Ongeldige kanaalnaam.', 'err');
