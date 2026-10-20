@@ -58,6 +58,7 @@
   .msg .badge { font-size: 10px; border-radius: 3px; padding: 0 3px; margin-right: 3px; vertical-align: 1px; font-weight: 700; }
   .badge.b { background: #e91916; } .badge.m { background: #00ad03; } .badge.v { background: #e005b9; } .badge.s { background: #6441a5; }
   .msg .user { font-weight: 700; }
+  .msg .stv-badge { height: 18px; vertical-align: -4px; margin-right: 3px; }
   .msg img.emote { height: 24px; vertical-align: middle; margin: -4px 0; }
   .paused { text-align: center; font-size: 12px; background: var(--accent); cursor: pointer; padding: 3px; }
   .zone-foot { padding: 6px; border-top: 1px solid var(--line); display: flex; gap: 4px; align-items: center; }
@@ -717,7 +718,8 @@
     const color = d.color || nameColor(d.user);
     el.innerHTML = '<span class="time">' + String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') + '</span>' +
       badges + '<span class="user" style="color:' + esc(color) + '">' + esc(d.name) + '</span>' +
-      (d.action ? ' ' : ': ') + '<span class="text"' + (d.action ? ' style="color:' + esc(color) + '"' : '') + '>' + renderText(d.text, d.emotes, ch, d.own) + '</span>';
+      (d.action ? ' ' : ': ') + '<span class="text"' + (d.action ? ' style="color:' + esc(color) + '"' : '') + '>' + renderText(d.text, d.emotes, ch, d.own, d.userId) + '</span>';
+    apply7tvStyle(el, d.userId);
     appendTo(z, el);
   }
 
@@ -746,7 +748,7 @@
     z.msgs.querySelectorAll('.msg').forEach((el) => { if (match(el)) el.classList.add('deleted'); });
   }
 
-  function renderText(text, emotes, ch, own) {
+  function renderText(text, emotes, ch, own, uid) {
     const chars = Array.from(text);
     const ranges = [];
     if (emotes) emotes.split('/').forEach((e) => {
@@ -756,22 +758,23 @@
     ranges.sort((x, y) => x.a - y.a);
     let out = '', i = 0;
     ranges.forEach((r) => {
-      out += renderWords(chars.slice(i, r.a).join(''), ch, own);
+      out += renderWords(chars.slice(i, r.a).join(''), ch, own, uid);
       const name = chars.slice(r.a, r.b + 1).join('');
       out += '<img class="emote" alt="' + esc(name) + '" title="' + esc(name) + '" src="https://static-cdn.jtvnw.net/emoticons/v2/' + encodeURIComponent(r.id) + '/default/dark/1.0">';
       i = r.b + 1;
     });
-    return out + renderWords(chars.slice(i).join(''), ch, own);
+    return out + renderWords(chars.slice(i).join(''), ch, own, uid);
   }
 
   // ---------- emotes (Twitch en 7TV) ----------
   // per bron een lijst naam -> afbeelding; Twitch-emotes in berichten van anderen komen via de chat zelf mee
   const emo = { stvGlobal: {}, stvChan: {}, twGlobal: {}, twUser: {}, twChan: {} };
 
-  function renderWords(str, ch, own) {
+  function renderWords(str, ch, own, uid) {
     if (!str) return '';
+    const personal = stv.personal[uid] || {};
     return str.split(/(\s+)/).map((w) => {
-      const url = (emo.stvChan[ch] || {})[w] || emo.stvGlobal[w] ||
+      const url = personal[w] || (emo.stvChan[ch] || {})[w] || emo.stvGlobal[w] ||
         (own && ((emo.twChan[ch] || {})[w] || emo.twUser[w] || emo.twGlobal[w]));
       return url ? '<img class="emote" alt="' + esc(w) + '" title="' + esc(w) + '" src="' + esc(url) + '">' : esc(w);
     }).join('');
@@ -820,6 +823,7 @@
   async function loadChannelEmotes(ch, roomId) {
     if (chanLoaded[ch]) return;
     chanLoaded[ch] = true;
+    stvEvents.watch(roomId);
     try {
       const r = await fetch('https://7tv.io/v3/users/twitch/' + roomId);
       if (r.ok) { const j = await r.json(); emo.stvChan[ch] = stvMap(j.emote_set && j.emote_set.emotes); }
@@ -827,12 +831,142 @@
     if (state.me) try { emo.twChan[ch] = twMap(await helix('GET', 'chat/emotes', { broadcaster_id: roomId }), {}); } catch {}
   }
 
+  // ---------- 7TV-cosmetica: naamkleur (paint), badge en persoonlijke emotes ----------
+  // Komt binnen via de 7TV EventAPI, net zoals de 7TV-extensie dat doet.
+  const stv = { paints: {}, badges: {}, userPaint: {}, userBadge: {}, personal: {}, sets: {}, me: null };
+  const stvColor = (c) => 'rgba(' + ((c >>> 24) & 255) + ',' + ((c >>> 16) & 255) + ',' + ((c >>> 8) & 255) + ',' + ((c & 255) / 255).toFixed(3) + ')';
+
+  function paintCss(p) {
+    const stops = (p.stops || []).map((s) => stvColor(s.color) + ' ' + (s.at * 100) + '%').join(', ');
+    let bg = '';
+    const fn = (p.function || '').toUpperCase();
+    if (fn === 'URL' && p.image_url) bg = 'url("' + p.image_url + '")';
+    else if (fn === 'RADIAL_GRADIENT') bg = (p.repeat ? 'repeating-' : '') + 'radial-gradient(' + (p.shape || 'circle') + ', ' + stops + ')';
+    else if (stops) bg = (p.repeat ? 'repeating-' : '') + 'linear-gradient(' + (p.angle || 0) + 'deg, ' + stops + ')';
+    const shadow = (p.shadows || []).map((s) => 'drop-shadow(' + s.x_offset + 'px ' + s.y_offset + 'px ' + s.radius + 'px ' + stvColor(s.color) + ')').join(' ');
+    return { bg, shadow, color: p.color != null ? stvColor(p.color) : '' };
+  }
+
+  function apply7tvStyle(el, uid) {
+    if (!uid) return;
+    const u = el.querySelector('.user');
+    const pid = stv.userPaint[uid], p = pid && stv.paints[pid];
+    if (u && p) {
+      const css = paintCss(p);
+      if (css.bg) {
+        u.style.backgroundImage = css.bg;
+        u.style.backgroundSize = '100% 100%';
+        u.style.webkitBackgroundClip = 'text'; u.style.backgroundClip = 'text';
+        u.style.color = 'transparent';
+        if (css.shadow) u.style.filter = css.shadow;
+      } else if (css.color) u.style.color = css.color;
+    }
+    const bid = stv.userBadge[uid], b = bid && stv.badges[bid];
+    if (u && b && !el.querySelector('.stv-badge')) {
+      u.insertAdjacentHTML('beforebegin', '<img class="stv-badge" alt="" title="' + esc(b.tooltip || b.name || '7TV') + '" src="' + esc(b.url) + '">');
+    }
+  }
+  function restyleUser(uid) {
+    Object.values(zoneEls).forEach((z) => z.msgs && z.msgs.querySelectorAll('.msg').forEach((el) => { if (el.dataset.userId === uid) apply7tvStyle(el, uid); }));
+  }
+
+  async function loadPersonalSet(uid, setId) {
+    try {
+      const r = await fetch('https://7tv.io/v3/emote-sets/' + setId);
+      if (!r.ok) return;
+      stv.personal[uid] = Object.assign(stv.personal[uid] || {}, stvMap((await r.json()).emotes));
+    } catch {}
+  }
+
+  function twitchIdOf(user) {
+    const c = ((user && user.connections) || []).find((x) => (x.platform || '').toUpperCase() === 'TWITCH');
+    return c && c.id;
+  }
+
+  function onStvDispatch(type, body) {
+    const o = body && body.object;
+    if (!o) return;
+    if (type === 'cosmetic.create') {
+      const d = o.data || {};
+      if (o.kind === 'PAINT') stv.paints[d.id || o.id] = d;
+      if (o.kind === 'BADGE') {
+        const h = d.host || {};
+        stv.badges[d.id || o.id] = { name: d.name, tooltip: d.tooltip, url: h.url ? 'https:' + h.url + '/1x.webp' : '' };
+      }
+      return;
+    }
+    if (type === 'entitlement.create') {
+      const uid = twitchIdOf(o.user);
+      if (!uid) return;
+      if (o.kind === 'PAINT') stv.userPaint[uid] = o.ref_id;
+      if (o.kind === 'BADGE') stv.userBadge[uid] = o.ref_id;
+      if (o.kind === 'EMOTE_SET') loadPersonalSet(uid, o.ref_id);
+      setTimeout(() => restyleUser(uid), 300);
+      return;
+    }
+    if (type === 'entitlement.delete') {
+      const uid = twitchIdOf(o.user);
+      if (!uid) return;
+      if (o.kind === 'PAINT' && stv.userPaint[uid] === o.ref_id) delete stv.userPaint[uid];
+      if (o.kind === 'BADGE' && stv.userBadge[uid] === o.ref_id) delete stv.userBadge[uid];
+    }
+  }
+
+  const stvEvents = {
+    ws: null, rooms: new Set(), retry: 2000,
+    connect() {
+      try { this.ws = new WebSocket('wss://events.7tv.io/v3'); } catch { return; }
+      const ws = this.ws;
+      ws.onopen = () => { this.retry = 2000; this.rooms.forEach((id) => this.sub(id)); };
+      ws.onmessage = (e) => {
+        let m; try { m = JSON.parse(e.data); } catch { return; }
+        if (m.op === 0 && m.d) onStvDispatch(m.d.type, m.d.body);
+      };
+      ws.onclose = () => { if (this.ws === ws) setTimeout(() => this.connect(), this.retry = Math.min(this.retry * 2, 60000)); };
+    },
+    sub(roomId) {
+      if (!this.ws || this.ws.readyState !== 1) return;
+      const condition = { ctx: 'channel', platform: 'TWITCH', id: roomId };
+      ['cosmetic.*', 'entitlement.*'].forEach((type) => this.ws.send(JSON.stringify({ op: 35, d: { type, condition } })));
+    },
+    watch(roomId) {
+      if (this.rooms.has(roomId)) return;
+      this.rooms.add(roomId);
+      if (!this.ws) this.connect(); else this.sub(roomId);
+      sendPresence(roomId);
+    },
+  };
+
+  // Laat 7TV weten dat jij in dit kanaal zit, zodat je eigen paint, badge en emotes worden doorgestuurd.
+  async function loadMy7tv() {
+    if (!state.me || stv.me) return;
+    try {
+      const r = await fetch('https://7tv.io/v3/users/twitch/' + state.me.user_id);
+      if (!r.ok) return;
+      const j = await r.json();
+      const u = j.user || {};
+      stv.me = u.id;
+      // persoonlijke emotes direct ophalen (vlag 4 = persoonlijke set)
+      (u.emote_sets || []).forEach((s) => { if ((s.flags & 4) === 4) loadPersonalSet(state.me.user_id, s.id); });
+      stvEvents.rooms.forEach((id) => sendPresence(id));
+    } catch {}
+  }
+  function sendPresence(roomId) {
+    if (!stv.me) return;
+    fetch('https://7tv.io/v3/users/' + stv.me + '/presences', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 1, passive: false, session_id: undefined, data: { platform: 'TWITCH', id: roomId } }),
+    }).catch(() => {});
+  }
+  setInterval(() => stvEvents.rooms.forEach((id) => sendPresence(id)), 10 * 60 * 1000);
+
   let pickerFor = null;
   function togglePicker(ch, input) {
     const pk = $('#picker');
     if (!pk.hidden && pickerFor === ch) { pk.hidden = true; return; }
     pickerFor = ch;
     const groups = [
+      ['Jouw 7TV-emotes', state.me && stv.personal[state.me.user_id]],
       ['7TV ' + ch, emo.stvChan[ch]], ['Twitch ' + ch, emo.twChan[ch]], ['Jouw Twitch-emotes', emo.twUser],
       ['Twitch algemeen', emo.twGlobal], ['7TV algemeen', emo.stvGlobal],
     ].filter(([, m]) => m && Object.keys(m).length);
@@ -893,10 +1027,10 @@
 
   // ---------- acties ----------
   function sendChat(ch, text) {
-    if (ch === 'demo') { addMsg('demo', { user: 'jij', name: state.me ? state.me.login : 'jij', text, badges: 'moderator', own: true }); return; }
+    if (ch === 'demo') { addMsg('demo', { user: 'jij', name: state.me ? state.me.login : 'jij', text, badges: 'moderator', own: true, userId: state.me ? state.me.user_id : 'jij' }); return; }
     if (!state.me) return toast('Log in (⚙) om berichten te versturen.', 'err');
     irc.send('PRIVMSG #' + ch + ' :' + text.replace(/[\r\n]+/g, ' '));
-    addMsg(ch, { user: state.me.login, name: state.me.login, text, badges: 'moderator', own: true });
+    addMsg(ch, { user: state.me.login, name: state.me.login, text, badges: 'moderator', own: true, userId: state.me.user_id });
   }
 
   async function runShortcut(sc) {
@@ -1168,7 +1302,7 @@
     if (!t) return;
     state.token = t; store.set('token', t);
     await validate();
-    if (state.me) { irc.reconnect(); loadTwitchEmotes(); toast('Ingelogd als ' + state.me.login, 'ok'); }
+    if (state.me) { irc.reconnect(); loadTwitchEmotes(); loadMy7tv(); toast('Ingelogd als ' + state.me.login, 'ok'); }
   };
   $('#exportBtn').onclick = () => {
     const blob = new Blob([JSON.stringify({ tabs: state.tabs, shortcuts: state.shortcuts, clientId: state.clientId }, null, 2)], { type: 'application/json' });
@@ -1202,7 +1336,7 @@
   renderTabs();
   renderZones();
   load7tvGlobal();
-  validate().then(() => { irc.connect(); loadTwitchEmotes(); });
+  validate().then(() => { irc.connect(); loadTwitchEmotes(); loadMy7tv(); });
 })();
 </script>
 </body>
