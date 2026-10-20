@@ -86,12 +86,12 @@
 
   #tabs { display: flex; gap: 2px; padding: 6px 12px 0; background: var(--panel); border-bottom: 1px solid var(--line);
     overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; flex-shrink: 0; }
-  .tab { display: flex; align-items: center; gap: 4px; padding: 6px 12px; border: 1px solid transparent; border-bottom: 0;
+  .tab { display: flex; align-items: center; gap: 6px; padding: 10px 16px; min-height: 44px; border: 1px solid transparent; border-bottom: 0;
     border-radius: 6px 6px 0 0; color: var(--muted); cursor: pointer; white-space: nowrap; user-select: none; }
   .tab:hover { color: var(--text); }
   .tab.on { background: var(--bg); border-color: var(--line); color: var(--text); margin-bottom: -1px; }
-  .tab .tclose { padding: 0 4px; font-size: 11px; }
-  .tadd { white-space: nowrap; }
+  .tab .tclose { padding: 4px 6px; font-size: 12px; }
+  .tadd { white-space: nowrap; min-height: 44px; padding: 0 14px; }
   .zone.stream { width: 640px; height: 400px; background: #000; }
   .zone.stream .player { flex: 1; border: 0; width: 100%; }
   .zone.buttons { align-self: flex-start; width: auto; height: auto; min-width: 0; min-height: 0; max-width: 100%; }
@@ -131,6 +131,39 @@
   .copyline { display: inline-flex; gap: 6px; align-items: center; margin-top: 4px; flex-wrap: wrap; }
   .copyline code { background: var(--panel2); padding: 2px 6px; border-radius: 4px; }
   .copyline button { padding: 2px 8px; font-size: 12px; }
+  #mview { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  #mview[hidden] { display: none; }
+  #zones[hidden] { display: none; }
+  .mv-video { width: 100%; aspect-ratio: 16 / 9; max-height: 40vh; background: #000; flex-shrink: 0; display: flex; }
+  .mv-bar { display: flex; gap: 4px; padding: 6px; background: var(--panel); border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  .mv-bar button { flex: 1; min-height: 40px; padding: 4px; touch-action: manipulation; }
+  .mv-bar button.on { background: var(--accent); border-color: var(--accent); }
+  .mv-bar .mv-switch { flex: 0 0 44px; }
+  .mv-pane { flex: 1; min-height: 0; display: flex; }
+  #mview .zone { width: 100% !important; height: 100% !important; min-width: 0; min-height: 0; resize: none; border: 0; border-radius: 0; flex: 1; }
+  #mview .zone-head { display: none; }
+  #mview .zone.buttons { align-self: stretch; }
+  #mview .pad { justify-content: flex-start; }
+  .mv-modbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 6px; background: var(--panel); border-top: 1px solid var(--line); flex-shrink: 0; }
+  .mv-modbar button { min-height: 1.5cm; font-size: 14px; touch-action: manipulation; }
+  .mv-modbar button.danger { border-color: var(--danger); }
+  .mv-sel { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+  .mv-sel b { color: var(--text); }
+  .vm-opts { display: flex; flex-direction: column; gap: 8px; }
+  .vm-opts button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px; text-align: left; min-height: 1.5cm; }
+  .vm-opts small { color: var(--muted); }
+  @media (min-width: 769px) {
+    #mview.view-video { display: grid; grid-template-columns: 1fr minmax(320px, 30%); grid-template-rows: auto 1fr auto; }
+    #mview.view-video .mv-video { grid-row: 1 / -1; grid-column: 1; max-height: none; aspect-ratio: auto; height: 100%; }
+    #mview.view-video .mv-bar, #mview.view-video .mv-pane, #mview.view-video .mv-modbar { grid-column: 2; }
+    #mview.view-chat, #mview.view-mod { max-width: 720px; width: 100%; margin: 0 auto; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+  }
+  @media (max-width: 768px) {
+    #shortcutBar, header h1 { display: none; }
+    #viewBtn { font-size: 0; } #viewBtn::before { content: '▣'; font-size: 16px; }
+    header { gap: 6px; }
+    #selInfo { max-width: 40vw; }
+  }
   .player-off { margin: auto; padding: 16px; text-align: center; color: var(--muted); max-width: 320px; }
   #emptyHint { margin: auto; text-align: center; color: var(--muted); max-width: 420px; }
 
@@ -181,12 +214,14 @@
     <button id="addZoneBtn" title="Zone toevoegen in dit tabblad">+ Zone</button>
     <div id="shortcutBar"></div>
     <button id="addScBtn" class="primary" title="Sneltoets toevoegen">+ Sneltoets</button>
+    <button id="viewBtn" hidden title="Weergave kiezen">▣ Weergave</button>
     <span id="selInfo"></span>
     <span id="account">niet ingelogd</span>
     <button id="settingsBtn" title="Instellingen">⚙</button>
   </header>
   <nav id="tabs"></nav>
   <div id="zones"></div>
+  <div id="mview" hidden></div>
 </div>
 
 <!-- Kanaal toevoegen -->
@@ -299,6 +334,20 @@
       <input type="file" id="importFile" accept=".json" hidden>
     </div>
     <div class="row"><button data-close>Sluiten</button></div>
+  </div>
+</div>
+
+<!-- Weergave kiezen (mobiel) -->
+<div class="modal-bg" id="viewModal">
+  <div class="modal">
+    <h2>Hoe wil je <span id="vmChan"></span> bekijken?</h2>
+    <div class="vm-opts">
+      <button data-view="chat"><b>💬 Chat</b><small>Alleen de chat, het snelst om te modereren</small></button>
+      <button data-view="video"><b>📺 Video + chat</b><small>Stream bovenaan, chat eronder</small></button>
+      <button data-view="mod"><b>🛡️ Modmodus</b><small>Chat met grote knoppen voor timeout, ban en verwijderen</small></button>
+    </div>
+    <p class="hint">Onderin wissel je altijd tussen Chat, Kijkers en Knoppen (je sneltoetsen en chatcommando's).</p>
+    <div class="row"><button data-view="desktop">Vrije indeling (zones)</button></div>
   </div>
 </div>
 
@@ -565,7 +614,7 @@
       b.dataset.id = t.id;
       b.innerHTML = '<span class="tname"></span>' + (state.tabs.length > 1 ? '<button class="icon tclose" title="Tabblad sluiten">✕</button>' : '');
       b.querySelector('.tname').textContent = t.name;
-      b.onclick = (e) => { if (Date.now() - (b.dragEnd || 0) < 400) return; if (!e.target.closest('.tclose')) switchTab(t.id); };
+      b.onclick = (e) => { if (Date.now() - (b.dragEnd || 0) < 400) return; if (e.target.closest('.tclose')) return; if (t.id === state.tab && isMobile()) openViewPicker(); else switchTab(t.id); };
       dragReorder(b, b, '#tabs > .tab', (target, after) => {
         const to = state.tabs.find((x) => x.id === target.dataset.id);
         state.tabs.splice(state.tabs.indexOf(t), 1);
@@ -590,7 +639,9 @@
     if (state.tab === id) return;
     state.tab = id; store.set('tab', id);
     clearSel(); state.active = null;
+    state.mview = null;
     renderTabs(); renderZones();
+    if (isMobile() && tabChannel(curTab())) openViewPicker();
   }
 
   function addTab() {
@@ -619,6 +670,8 @@
   function renderZones() {
     const wrap = $('#zones');
     wrap.innerHTML = '';
+    wrap.hidden = false; $('#mview').hidden = true;
+    $('#viewBtn').hidden = !tabChannel(curTab());
     if (state.tab === mainTabId()) wrap.appendChild(myChansEl());
     const zones = curTab().zones;
     // knoppenpaneel staat altijd in het tabblad, direct naast de eerste chat
@@ -645,6 +698,93 @@
     const firstChat = zones.find(isChat);
     const keep = state.active && zones.some((z) => isChat(z) && z.channel === state.active);
     setActive(keep ? state.active : firstChat ? firstChat.channel : null);
+    if (state.mview && state.mview.tabId === state.tab) renderMobile();
+  }
+
+  // ---------- mobiele weergave ----------
+  const mq = matchMedia('(max-width: 768px)');
+  const isMobile = () => mq.matches;
+  mq.addEventListener('change', () => renderZones());
+  const tabChannel = (t) => t && (t.channel || (t.zones.find((z) => !z.kind || z.kind === 'chat') || {}).channel);
+
+  function openViewPicker() {
+    const ch = tabChannel(curTab());
+    if (!ch) return;
+    $('#vmChan').textContent = ch;
+    openModal('viewModal');
+  }
+  document.querySelectorAll('#viewModal [data-view]').forEach((b) => b.onclick = () => {
+    closeModal('viewModal');
+    const v = b.dataset.view;
+    state.mview = v === 'desktop' ? null : { tabId: state.tab, view: v, pane: 'chat' };
+    renderZones();
+  });
+
+  function ensureZone(z) {
+    const k = keyOf(z);
+    if (!zoneEls[k]) zoneEls[k] = z.kind === 'stream' ? buildStream(z) : z.kind === 'buttons' ? buildPad(z) : z.kind === 'users' ? buildUsers(z) : buildZone(z);
+    return zoneEls[k];
+  }
+
+  function renderMobile() {
+    const ch = tabChannel(curTab());
+    const mv = $('#mview');
+    const v = state.mview.view;
+    $('#zones').hidden = true;
+    mv.hidden = false;
+    mv.innerHTML = '';
+    mv.className = 'view-' + v;
+    if (v === 'video') {
+      const box = document.createElement('div');
+      box.className = 'mv-video';
+      box.appendChild(ensureZone({ channel: ch, kind: 'stream' }).root);
+      mv.appendChild(box);
+    }
+    const bar = document.createElement('div');
+    bar.className = 'mv-bar';
+    [['chat', '💬 Chat'], ['users', '👥 Kijkers'], ['buttons', '⚡ Knoppen']].forEach(([k, label]) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      if (state.mview.pane === k) b.className = 'on';
+      b.onclick = () => { state.mview.pane = k; renderMobile(); };
+      bar.appendChild(b);
+    });
+    const vb = document.createElement('button');
+    vb.className = 'mv-switch'; vb.textContent = '⋯'; vb.title = 'Andere weergave';
+    vb.onclick = openViewPicker;
+    bar.appendChild(vb);
+    mv.appendChild(bar);
+
+    const pane = document.createElement('div');
+    pane.className = 'mv-pane';
+    const p = state.mview.pane;
+    const zone = p === 'users' ? ensureZone({ channel: ch, kind: 'users' }) : p === 'buttons' ? ensureZone({ channel: 'knoppen', kind: 'buttons' }) : ensureZone({ channel: ch, kind: 'chat' });
+    pane.appendChild(zone.root);
+    mv.appendChild(pane);
+    if (p === 'chat') {
+      setActive(ch);
+      if (zone.stick) zone.msgs.scrollTop = zone.msgs.scrollHeight;
+    }
+    if (p === 'users') loadUsers(zone);
+
+    if (v === 'mod') {
+      const mb = document.createElement('div');
+      mb.className = 'mv-modbar';
+      mb.innerHTML = '<div class="mv-sel"></div>';
+      [['🗑 Weg', 'delete', 0], ['10 min', 'timeout', 600], ['1 uur', 'timeout', 3600], ['⛔ Ban', 'ban', 0]].forEach(([label, type, dur]) => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        if (type === 'ban') b.className = 'danger';
+        b.onclick = () => runShortcut({ name: label, type, dur, reason: '' });
+        mb.appendChild(b);
+      });
+      mv.appendChild(mb);
+      updateModSel();
+    }
+  }
+  function updateModSel() {
+    const el = document.querySelector('.mv-sel');
+    if (el) el.innerHTML = state.sel ? 'Geselecteerd: <b>' + esc(state.sel.user) + '</b>' : 'Tik op een bericht om iemand te selecteren';
   }
 
   function makeShell(z, title, extraBtns) {
@@ -680,7 +820,7 @@
     });
     new ResizeObserver(() => {
       const zz = zone.tabZone;
-      if (!zz || !root.isConnected || !root.offsetWidth) return;
+      if (!zz || !root.isConnected || !root.offsetWidth || isMobile() || root.closest('#mview')) return;
       zz.w = Math.round(root.offsetWidth); zz.h = Math.round(root.offsetHeight);
       clearTimeout(zone.saveT); zone.saveT = setTimeout(saveTabs, 300);
     }).observe(root);
@@ -1314,11 +1454,13 @@
     el.classList.add('sel');
     setActive(ch);
     $('#selInfo').innerHTML = 'Geselecteerd: <b>' + esc(el.dataset.user) + '</b> <kbd>Esc</kbd>';
+    updateModSel();
   }
   function clearSel() {
     if (state.sel) state.sel.el.classList.remove('sel');
     state.sel = null;
     $('#selInfo').innerHTML = '';
+    updateModSel();
   }
 
   // ---------- acties ----------
@@ -1582,6 +1724,7 @@
   $('#addZoneBtn').onclick = () => { $('#zoneName').value = ''; $('#zoneKind').onchange(); openModal('zoneModal'); $('#zoneName').focus(); };
   $('#zoneSave').onclick = () => { addZone($('#zoneName').value, $('#zoneKind').value); closeModal('zoneModal'); };
   $('#zoneName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#zoneSave').click(); });
+  $('#viewBtn').onclick = () => openViewPicker();
   $('#addScBtn').onclick = () => openScModal(null);
   $('#scType').onchange = updateScFields;
   $('#scKey').onclick = () => { listening = !listening; updateKeyBtn(); };
