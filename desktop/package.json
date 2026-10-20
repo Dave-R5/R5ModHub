@@ -1,0 +1,38 @@
+{
+  "name": "modweergave",
+  "productName": "Modweergave",
+  "version": "1.0.0",
+  "description": "Twitch-modweergave als Windows-app (laadt twitch.daver5.nl)",
+  "main": "main.js",
+  "author": "Dave",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.9.1",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "nl.daver5.modweergave",
+    "productName": "Modweergave",
+    "files": [
+      "main.js",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "artifactName": "Modweergave-Setup-${version}.exe",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Modweergave"
+    }
+  },
+  "repository": "github:daveroosjen5-maker/modweergave"
+}
