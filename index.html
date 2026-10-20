@@ -169,8 +169,8 @@
       <option value="chat">Chat (lezen en modereren)</option>
       <option value="stream">Streamweergave (video)</option>
       <option value="both">Stream én chat (video met chat ernaast)</option>
-      <option value="all">Stream, chat én deelnemers</option>
-      <option value="users">Alleen deelnemerslijst</option>
+      <option value="all">Stream, chat én kijkers</option>
+      <option value="users">Alleen kijkerslijst</option>
     </select>
     <div id="zoneNameWrap">
     <label for="zoneName">Kanaalnaam (zoals in twitch.tv/<b>naam</b>)</label>
@@ -624,9 +624,9 @@
 
   // ---------- deelnemerslijst ----------
   function buildUsers(z) {
-    const zone = makeShell(z, '👥 ' + z.channel, '<button class="icon" data-act="refresh" title="Vernieuwen">⟳</button>');
+    const zone = makeShell(z, '👥 Kijkers ' + z.channel, '<button class="icon" data-act="refresh" title="Vernieuwen">⟳</button>');
     zone.root.insertAdjacentHTML('beforeend',
-      '<div class="ul-top"><input placeholder="Zoek deelnemer…" autocomplete="off"><span class="ul-count"></span></div><div class="ul-list"></div>');
+      '<div class="ul-top"><input placeholder="Zoek kijker…" autocomplete="off"><span class="ul-count"></span></div><div class="ul-list"></div>');
     zone.list = zone.root.querySelector('.ul-list');
     zone.count = zone.root.querySelector('.ul-count');
     zone.search = zone.root.querySelector('.ul-top input');
@@ -670,6 +670,10 @@
         if (!cursor) break;
       }
       zone.users = all; zone.total = total;
+      try {
+        const st = await helix('GET', 'streams', { user_login: ch });
+        zone.viewers = st.data.length ? st.data[0].viewer_count : null;
+      } catch { zone.viewers = undefined; }
       drawUsers(zone);
     } catch (e) {
       zone.list.innerHTML = '<p class="hint" style="padding:8px">Deelnemers laden mislukt: ' + esc(e.message) +
@@ -700,7 +704,9 @@
         zone.list.appendChild(b);
       });
     });
-    zone.count.textContent = (zone.total || zone.users.length) + ' in chat';
+    const n = zone.total || zone.users.length;
+    zone.count.textContent = zone.viewers === null ? n + ' in chat · offline' :
+      zone.viewers !== undefined ? zone.viewers + ' kijkers · ' + n + ' in chat' : n + ' in chat';
   }
 
   function buildStream(z) {
