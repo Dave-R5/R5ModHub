@@ -104,6 +104,14 @@
   .ul-title { font-size: 11px; color: var(--muted); text-transform: uppercase; padding: 8px 10px 2px; }
   .ul-u { display: block; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 0; padding: 3px 10px; }
   .ul-u:hover { background: #26262c; }
+  .mychans { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 0 6px; }
+  .mychans .hint { color: var(--muted); font-size: 13px; }
+  .mychan { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-width: 120px; min-height: 1.5cm;
+    padding: 6px 12px; text-align: left; touch-action: manipulation; }
+  .mychan .mc-name { font-weight: 600; }
+  .mychan .mc-state { font-size: 11px; color: var(--muted); }
+  .mychan.live { border-color: var(--danger); }
+  .mychan.live .mc-state { color: #ff6b6b; }
   .player-off { margin: auto; padding: 16px; text-align: center; color: var(--muted); max-width: 320px; }
   #emptyHint { margin: auto; text-align: center; color: var(--muted); max-width: 420px; }
 
@@ -270,7 +278,7 @@
 <script>
 (() => {
   'use strict';
-  const SCOPES = ['chat:read', 'chat:edit', 'moderator:manage:banned_users', 'moderator:manage:chat_messages', 'user:read:emotes', 'moderator:read:chatters'];
+  const SCOPES = ['chat:read', 'chat:edit', 'moderator:manage:banned_users', 'moderator:manage:chat_messages', 'user:read:emotes', 'moderator:read:chatters', 'user:read:moderated_channels'];
   const MAX_MSGS = 300;
   const TYPE_LABEL = { msg: 'Chatbericht', timeout: 'Timeout', ban: 'Ban', unban: 'Unban', delete: 'Verwijderen' };
   const USER_TYPES = ['timeout', 'ban', 'unban', 'delete'];
@@ -358,7 +366,8 @@
 
   function logout() {
     state.token = ''; state.me = null; store.del('token');
-    renderAccount(); irc.reconnect();
+    myChans.list = null;
+    renderAccount(); renderZones(); irc.reconnect();
     toast('Uitgelogd.');
   }
 
@@ -526,6 +535,7 @@
   function renderZones() {
     const wrap = $('#zones');
     wrap.innerHTML = '';
+    if (state.tab === state.tabs[0].id) wrap.appendChild(myChansEl());
     const zones = curTab().zones;
     // knoppenpaneel staat altijd in het tabblad, direct naast de eerste chat
     const fc = zones.findIndex((z) => !z.kind || z.kind === 'chat');
@@ -534,7 +544,7 @@
       saveTabs();
     }
     if (!zones.length) {
-      wrap.innerHTML = '<div id="emptyHint"><p>Dit tabblad is nog leeg.</p><p>Klik op <b>+ Zone</b> om een chat of streamweergave toe te voegen. Probeer <b>demo</b> om alles te testen zonder in te loggen.</p></div>';
+      wrap.insertAdjacentHTML('beforeend', '<div id="emptyHint"><p>Dit tabblad is nog leeg.</p><p>Klik op <b>+ Zone</b> om een chat of streamweergave toe te voegen. Probeer <b>demo</b> om alles te testen zonder in te loggen.</p></div>');
       return;
     }
     zones.forEach((z) => {
@@ -757,6 +767,70 @@
     add.className = 'sq add'; add.textContent = '+'; add.title = 'Sneltoets toevoegen';
     add.onclick = () => openScModal(null);
     zone.pad.appendChild(add);
+  }
+
+  // ---------- mijn kanalen (waar je mod bent) ----------
+  const myChans = { list: null, live: {}, err: '' };
+  async function loadMyChans() {
+    if (!state.me) return;
+    try {
+      const all = [];
+      let cursor = '';
+      for (let i = 0; i < 10; i++) {
+        const params = { user_id: state.me.user_id, first: 100 };
+        if (cursor) params.after = cursor;
+        const j = await helix('GET', 'moderation/channels', params);
+        all.push(...j.data);
+        cursor = j.pagination && j.pagination.cursor;
+        if (!cursor) break;
+      }
+      // je eigen kanaal staat er niet in, maar daar ben je ook "mod"
+      if (!all.some((c) => c.broadcaster_id === state.me.user_id))
+        all.unshift({ broadcaster_id: state.me.user_id, broadcaster_login: state.me.login, broadcaster_name: state.me.login });
+      myChans.list = all; myChans.err = '';
+      await loadMyChansLive();
+    } catch (e) { myChans.err = e.message; }
+    if (state.tab === state.tabs[0].id) renderZones();
+  }
+  async function loadMyChansLive() {
+    if (!myChans.list) return;
+    const live = {};
+    for (let i = 0; i < myChans.list.length; i += 100) {
+      const params = new URLSearchParams();
+      myChans.list.slice(i, i + 100).forEach((c) => params.append('user_id', c.broadcaster_id));
+      try { (await helix('GET', 'streams?' + params.toString())).data.forEach((st) => { live[st.user_id] = st; }); } catch {}
+    }
+    myChans.live = live;
+  }
+  setInterval(async () => { if (myChans.list) { await loadMyChansLive(); if (state.tab === state.tabs[0].id) renderZones(); } }, 2 * 60 * 1000);
+
+  function myChansEl() {
+    const box = document.createElement('div');
+    box.className = 'mychans';
+    if (!state.me) { box.innerHTML = '<span class="hint">Log in (⚙) om hier knoppen te krijgen voor de kanalen waar je mod bent.</span>'; return box; }
+    if (myChans.err) { box.innerHTML = '<span class="hint">Kanalen laden mislukt: ' + esc(myChans.err) + '. Log opnieuw in via ⚙ na deze update.</span>'; return box; }
+    if (!myChans.list) { box.innerHTML = '<span class="hint">Kanalen waar je mod bent worden geladen…</span>'; return box; }
+    const sorted = [...myChans.list].sort((a, b) => (!!myChans.live[b.broadcaster_id] - !!myChans.live[a.broadcaster_id]) || a.broadcaster_login.localeCompare(b.broadcaster_login));
+    sorted.forEach((c) => {
+      const st = myChans.live[c.broadcaster_id];
+      const b = document.createElement('button');
+      b.className = 'mychan' + (st ? ' live' : '');
+      b.title = st ? (st.game_name || '') + ' · ' + (st.title || '') : 'Offline';
+      b.innerHTML = '<span class="mc-name">' + esc(c.broadcaster_name) + '</span><span class="mc-state">' + (st ? '● ' + st.viewer_count + ' kijkers' : 'offline') + '</span>';
+      b.onclick = () => openChannelTab(c.broadcaster_login, c.broadcaster_name);
+      box.appendChild(b);
+    });
+    return box;
+  }
+
+  function openChannelTab(login, name) {
+    let t = state.tabs.find((x) => x.channel === login);
+    if (!t) {
+      t = { id: 't' + Date.now().toString(36), name: name || login, channel: login, zones: [] };
+      state.tabs.push(t); saveTabs();
+      switchTab(t.id);
+      addZone(login, 'all');
+    } else switchTab(t.id);
   }
 
   function addZone(name, kind) {
@@ -1438,7 +1512,7 @@
     if (!t) return;
     state.token = t; store.set('token', t);
     await validate();
-    if (state.me) { irc.reconnect(); loadTwitchEmotes(); loadMy7tv(); toast('Ingelogd als ' + state.me.login, 'ok'); }
+    if (state.me) { irc.reconnect(); loadTwitchEmotes(); loadMy7tv(); loadMyChans(); toast('Ingelogd als ' + state.me.login, 'ok'); }
   };
   $('#exportBtn').onclick = () => {
     const blob = new Blob([JSON.stringify({ tabs: state.tabs, shortcuts: state.shortcuts, clientId: state.clientId }, null, 2)], { type: 'application/json' });
@@ -1472,7 +1546,7 @@
   renderTabs();
   renderZones();
   load7tvGlobal();
-  validate().then(() => { irc.connect(); loadTwitchEmotes(); loadMy7tv(); });
+  validate().then(() => { irc.connect(); loadTwitchEmotes(); loadMy7tv(); loadMyChans(); });
 })();
 </script>
 </body>
