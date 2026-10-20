@@ -939,8 +939,21 @@
         if (!cursor) break;
       }
     };
-    try { await grab('moderation/moderators', 1); } catch {}
-    try { await grab('channels/vips', 2); } catch {}
+    let modsOk = false, vipsOk = false;
+    try { await grab('moderation/moderators', 1); modsOk = true; } catch {}
+    try { await grab('channels/vips', 2); vipsOk = true; } catch {}
+    // In andermans kanaal geeft Twitch deze lijsten niet aan mods. Dan vragen we ze op bij
+    // IVR (api.ivr.fi), een openbare dienst die veel chatprogramma's hiervoor gebruiken.
+    if (!modsOk || !vipsOk) {
+      try {
+        const r = await fetch('https://api.ivr.fi/v2/twitch/modvip/' + encodeURIComponent(zone.channel));
+        if (r.ok) {
+          const j = await r.json();
+          if (!modsOk) (j.mods || []).forEach((u) => { if (u.login && !roles[u.login]) roles[u.login] = 1; });
+          if (!vipsOk) (j.vips || []).forEach((u) => { if (u.login && !roles[u.login]) roles[u.login] = 2; });
+        }
+      } catch {}
+    }
     roleCache[zone.channel] = { at: Date.now(), roles };
     zone.roles = roles;
   }
