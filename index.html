@@ -245,6 +245,8 @@
   .ml-row .time { color: var(--muted); font-size: 11px; white-space: nowrap; min-width: 82px; }
   .ml-row .what { flex: 1; word-break: break-word; }
   .ml-row .ch { color: var(--muted); font-size: 11px; }
+  .ml-row .mod { color: #b9a3ff; font-weight: 600; }
+  #mlState { font-size: 12px; margin: 6px 0; }
   .ul-graph { padding: 4px 8px 6px; border-bottom: 1px solid var(--line); }
   .ul-graph svg { width: 100%; height: 44px; display: block; }
   .ul-graph .g-info { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; }
@@ -442,9 +444,10 @@
     <h2>Modlog</h2>
     <div style="display:flex;gap:8px">
       <select id="mlChan"></select>
-      <input id="mlSearch" placeholder="Zoek gebruiker…" autocomplete="off">
+      <input id="mlSearch" placeholder="Zoek gebruiker of mod…" autocomplete="off">
     </div>
-    <p class="hint">Alles wat jij via R5 ModHub hebt gedaan, op dit apparaat (de laatste 1000 acties).</p>
+    <p class="hint">Modacties van alle mods in de kanalen waar jij mod bent, met wie het deed. Ze worden bijgehouden zolang R5 ModHub open staat (laatste 3000, op dit apparaat).</p>
+    <div id="mlState" class="hint"></div>
     <div class="ml-list" id="mlList"></div>
     <div class="row">
       <button id="mlClear" style="margin-right:auto;color:var(--danger)">Leegmaken</button>
@@ -461,7 +464,8 @@
 <script>
 (() => {
   'use strict';
-  const SCOPES = ['chat:read', 'chat:edit', 'moderator:manage:banned_users', 'moderator:manage:chat_messages', 'user:read:emotes', 'moderator:read:chatters', 'user:read:moderated_channels', 'moderation:read', 'channel:read:vips', 'moderator:manage:shield_mode', 'moderator:manage:chat_settings'];
+  const SCOPES = ['chat:read', 'chat:edit', 'moderator:manage:banned_users', 'moderator:manage:chat_messages', 'user:read:emotes', 'moderator:read:chatters', 'user:read:moderated_channels', 'moderation:read', 'channel:read:vips', 'moderator:manage:shield_mode', 'moderator:manage:chat_settings',
+    'moderator:read:blocked_terms', 'moderator:read:unban_requests', 'moderator:read:warnings', 'moderator:read:moderators', 'moderator:read:vips'];
   const MAX_MSGS = 300;
   // Client ID van de gedeelde Twitch-app van deze site: hiermee kan iedereen direct inloggen.
   // Een Client ID is openbaar (geen wachtwoord), dus hij mag in de code staan.
@@ -568,6 +572,7 @@
 
   function logout() {
     state.token = ''; state.me = null; store.del('token');
+    esubStop();
     myChans.list = null;
     renderAccount(); renderZones(); irc.reconnect();
     toast('Uitgelogd.');
@@ -1224,6 +1229,7 @@
         all.unshift({ broadcaster_id: state.me.user_id, broadcaster_login: state.me.login, broadcaster_name: state.me.login });
       myChans.list = all; myChans.err = '';
       await loadMyChansLive();
+      esubSync();
     } catch (e) { myChans.err = e.message; }
     if (state.tab === mainTabId()) renderZones();
   }
@@ -1825,22 +1831,123 @@
   });
 
   // ---------- modlog ----------
-  function logAction(ch, user, what) {
-    modlog.push({ t: Date.now(), ch, user: user || '', what });
-    if (modlog.length > 1000) modlog.splice(0, modlog.length - 1000);
+  function logAction(ch, user, what, mod, via) {
+    // kwam dezelfde actie van jou al via Twitch binnen, dan niet dubbel opslaan
+    if (!via && state.me && modlog.slice(-30).some((x) => x.via === 'twitch' && x.mod.toLowerCase() === state.me.login && x.ch === ch && x.user === (user || '') && Date.now() - x.t < 30000)) return;
+    modlog.push({ t: Date.now(), ch, user: user || '', what, mod: mod || (state.me ? state.me.login : 'jij'), via: via || 'hub' });
+    if (modlog.length > 3000) modlog.splice(0, modlog.length - 3000);
     store.set('modlog', modlog);
+    if ($('#modlogModal').classList.contains('open')) renderModlog();
   }
+
+  // ---------- live modlog via Twitch EventSub (alle mods, met naam) ----------
+  const esub = { ws: null, session: null, subs: {}, err: '', retry: 2000, last: 0 };
+  function esubConnect(url) {
+    if (!state.me) return;
+    let ws;
+    try { ws = new WebSocket(url || 'wss://eventsub.wss.twitch.tv/ws'); } catch { return; }
+    if (!url) esub.ws = ws;
+    ws.onmessage = (e) => {
+      let m; try { m = JSON.parse(e.data); } catch { return; }
+      esub.last = Date.now();
+      const t = m.metadata && m.metadata.message_type;
+      if (t === 'session_welcome') {
+        esub.retry = 2000;
+        if (url) { const prev = esub.ws; esub.ws = ws; esub.session = m.payload.session.id; if (prev && prev !== ws) prev.close(); }
+        else { esub.session = m.payload.session.id; esub.subs = {}; esubSync(); }
+        renderEsubState();
+      } else if (t === 'session_reconnect') esubConnect(m.payload.session.reconnect_url);
+      else if (t === 'notification') onModEvent(m.payload.subscription.type, m.payload.event);
+      else if (t === 'revocation') { delete esub.subs[m.payload.subscription.condition.broadcaster_user_id]; renderEsubState(); }
+    };
+    ws.onclose = () => {
+      if (esub.ws !== ws) return;
+      esub.ws = null; esub.session = null; esub.subs = {};
+      renderEsubState();
+      if (state.me) setTimeout(() => { if (!esub.ws) esubConnect(); }, esub.retry = Math.min(esub.retry * 2, 60000));
+    };
+  }
+  function esubStop() { const ws = esub.ws; esub.ws = null; esub.session = null; esub.subs = {}; if (ws) ws.close(); }
+  // valt de verbinding stil weg (Twitch stuurt elke 10 s een teken van leven), dan opnieuw verbinden
+  setInterval(() => { if (esub.ws && esub.session && Date.now() - esub.last > 60000) esub.ws.close(); }, 15000);
+
+  async function esubSync() {
+    if (!esub.session || !myChans.list || !state.me) return;
+    const session = esub.session;
+    for (const c of myChans.list) {
+      const bid = c.broadcaster_id;
+      if (esub.subs[bid] || esub.session !== session) continue;
+      esub.subs[bid] = 'bezig';
+      try {
+        for (const [type, version] of [['channel.moderate', '2'], ['channel.shield_mode.begin', '1'], ['channel.shield_mode.end', '1']]) {
+          try {
+            await helix('POST', 'eventsub/subscriptions', null, { type, version,
+              condition: { broadcaster_user_id: bid, moderator_user_id: state.me.user_id }, transport: { method: 'websocket', session_id: session } });
+          } catch (e) { if (!/already exists|409/i.test(e.message)) throw e; }
+        }
+        esub.subs[bid] = 'ok';
+      } catch (e) { esub.subs[bid] = 'fout'; esub.err = e.message; }
+    }
+    renderEsubState();
+  }
+  function renderEsubState() {
+    const el = $('#mlState');
+    if (!el) return;
+    const v = Object.values(esub.subs), ok = v.filter((x) => x === 'ok').length, bad = v.filter((x) => x === 'fout').length;
+    el.innerHTML = !state.me ? 'Log in (⚙) om de modacties van alle mods te zien.'
+      : !esub.session ? 'Live modlog: verbinden met Twitch…'
+      : '<span style="color:var(--ok)">●</span> Live modlog actief voor ' + ok + ' kana' + (ok === 1 ? 'al' : 'len') +
+        (bad ? '. <span style="color:#ff6b6b">' + bad + ' mislukt: ' + esc(esub.err) + (/scope|401|403|authoriz/i.test(esub.err) ? '. Log opnieuw in via ⚙.' : '') + '</span>' : '');
+  }
+
+  function describeMod(ev) {
+    const a = ev.action || '', base = a.replace(/^shared_chat_/, '');
+    const o = ev[a] || ev[base] || (/term$/.test(base) ? ev.automod_terms : /unban_request$/.test(base) ? ev.unban_request : null) || {};
+    const r = o.reason ? ' (' + o.reason + ')' : '';
+    const secs = o.expires_at ? Math.max(1, Math.round((Date.parse(o.expires_at) - Date.now()) / 1000)) : 0;
+    const map = {
+      ban: 'ban' + r, timeout: 'timeout' + (secs ? ' ' + fmtDur(secs) : '') + r, unban: 'ban opgeheven', untimeout: 'timeout opgeheven',
+      delete: 'bericht verwijderd' + (o.message_body ? ': "' + o.message_body + '"' : ''), clear: 'chat gewist',
+      emoteonly: 'Alleen emotes aan', emoteonlyoff: 'Alleen emotes uit',
+      followers: 'Alleen volgers aan' + (o.follow_duration_minutes ? ' (' + o.follow_duration_minutes + ' min)' : ''), followersoff: 'Alleen volgers uit',
+      slow: 'Slow mode aan' + (o.wait_time_seconds ? ' (' + o.wait_time_seconds + ' s)' : ''), slowoff: 'Slow mode uit',
+      subscribers: 'Alleen abonnees aan', subscribersoff: 'Alleen abonnees uit', uniquechat: 'Unieke berichten aan', uniquechatoff: 'Unieke berichten uit',
+      vip: 'VIP gegeven', unvip: 'VIP afgenomen', mod: 'mod gemaakt', unmod: 'mod afgenomen',
+      raid: 'raid naar ' + (o.user_name || o.user_login || '') + (o.viewer_count ? ' (' + o.viewer_count + ' kijkers)' : ''), unraid: 'raid geannuleerd',
+      warn: 'waarschuwing' + r, approve_unban_request: 'unban-verzoek goedgekeurd', deny_unban_request: 'unban-verzoek afgewezen',
+      add_blocked_term: 'geblokkeerd woord toegevoegd: ', remove_blocked_term: 'geblokkeerd woord verwijderd: ',
+      add_permitted_term: 'toegestaan woord toegevoegd: ', remove_permitted_term: 'toegestaan woord verwijderd: ',
+    };
+    let what = map[base] || base;
+    if (/term$/.test(base)) what += (o.terms || []).join(', ');
+    if (a !== base) what += ' (gedeelde chat)';
+    return [/raid$/.test(base) ? '' : (o.user_login || ''), what];
+  }
+
+  function onModEvent(type, ev) {
+    const ch = ev.broadcaster_user_login, mod = ev.moderator_user_login || '';
+    const [user, what] = type === 'channel.shield_mode.begin' ? ['', 'Shield-modus aan'] : type === 'channel.shield_mode.end' ? ['', 'Shield-modus uit'] : describeMod(ev);
+    if (type !== 'channel.moderate') { const r = room[ch] || (room[ch] = {}); r.shield = type.endsWith('begin'); if (ddFor === ch) drawChatDd(); }
+    // eigen actie via R5 ModHub staat er al in: alleen afvinken
+    if (state.me && mod === state.me.login) {
+      const own = modlog.slice(-30).find((x) => x.via === 'hub' && !x.seen && x.ch === ch && x.user === user && Date.now() - x.t < 30000);
+      if (own) { own.seen = true; store.set('modlog', modlog); return; }
+    }
+    logAction(ch, user, what, ev.moderator_user_name || mod, 'twitch');
+  }
+
   function renderModlog() {
     const sel = $('#mlChan'), cur = sel.value;
     const chans = [...new Set(modlog.map((x) => x.ch))].sort();
     sel.innerHTML = '<option value="">Alle kanalen</option>' + chans.map((c) => '<option>' + esc(c) + '</option>').join('');
     sel.value = chans.includes(cur) ? cur : '';
     const q = $('#mlSearch').value.trim().toLowerCase();
-    const rows = modlog.filter((x) => (!sel.value || x.ch === sel.value) && (!q || x.user.includes(q))).slice(-300).reverse();
+    renderEsubState();
+    const rows = modlog.filter((x) => (!sel.value || x.ch === sel.value) && (!q || x.user.includes(q) || (x.mod || '').toLowerCase().includes(q))).slice(-300).reverse();
     $('#mlList').innerHTML = rows.length ? rows.map((x) => {
       const d = new Date(x.t);
       return '<div class="ml-row"><span class="time">' + d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) + ' ' + hhmm(d) +
-        '</span><span class="what">' + (x.user ? '<b>' + esc(x.user) + '</b>: ' : '') + esc(x.what) + '</span><span class="ch">' + esc(x.ch) + '</span></div>';
+        '</span><span class="what">' + (x.mod ? '<span class="mod">' + esc(x.mod) + '</span> → ' : '') + (x.user ? '<b>' + esc(x.user) + '</b>: ' : '') + esc(x.what) + '</span><span class="ch">' + esc(x.ch) + '</span></div>';
     }).join('') : '<p class="hint">Nog niets gelogd.</p>';
   }
 
@@ -1990,8 +2097,8 @@
       }, 400);
     };
     const past = modlog.filter((x) => x.user === user).slice(-4).reverse();
-    if (past.length) card.querySelector('.card-log').innerHTML = '<div class="card-label">Jouw eerdere acties</div>' + past.map((x) =>
-      '<div class="hmsg"><span class="time">' + new Date(x.t).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) + '</span> ' + esc(x.what) + ' <small style="color:var(--muted)">' + esc(x.ch) + '</small></div>').join('');
+    if (past.length) card.querySelector('.card-log').innerHTML = '<div class="card-label">Eerdere modacties</div>' + past.map((x) =>
+      '<div class="hmsg"><span class="time">' + new Date(x.t).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) + '</span> ' + esc(x.what) + ' <small style="color:var(--muted)">door ' + esc(x.mod || '?') + ' in ' + esc(x.ch) + '</small></div>').join('');
 
     // laatste berichten van deze gebruiker in deze chat
     const hist = card.querySelector('.card-hist');
@@ -2331,7 +2438,7 @@
   loadBttvFfzGlobal();
   applyOpts();
   validate().then(() => {
-    irc.connect(); loadTwitchEmotes(); loadMy7tv(); loadMyChans();
+    irc.connect(); loadTwitchEmotes(); loadMy7tv(); loadMyChans(); esubConnect();
     Object.values(zoneEls).forEach((z) => { if (z.kind === 'users') loadUsers(z); });
   });
   // Installeerbare app (PWA)
