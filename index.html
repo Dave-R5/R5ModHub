@@ -115,6 +115,14 @@
   .mychan.live .mc-state { color: #ff6b6b; }
   body.resizing iframe { pointer-events: none; }
   body.resizing { user-select: none; }
+  .howto { margin-top: 8px; font-size: 13px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
+  .howto summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+  .howto ol { margin: 8px 0 4px; padding-left: 20px; }
+  .howto li { margin: 4px 0; }
+  .howto a { color: var(--accent); }
+  .copyline { display: inline-flex; gap: 6px; align-items: center; margin-top: 4px; flex-wrap: wrap; }
+  .copyline code { background: var(--panel2); padding: 2px 6px; border-radius: 4px; }
+  .copyline button { padding: 2px 8px; font-size: 12px; }
   .player-off { margin: auto; padding: 16px; text-align: center; color: var(--muted); max-width: 320px; }
   #emptyHint { margin: auto; text-align: center; color: var(--muted); max-width: 420px; }
 
@@ -251,7 +259,19 @@
     <div id="loginState" class="hint"></div>
     <label for="clientId">Twitch Client ID</label>
     <input id="clientId" autocomplete="off" placeholder="van dev.twitch.tv/console/apps">
-    <p class="hint">Zet als OAuth Redirect URL in je Twitch-app: <b id="redirectUrl"></b></p>
+    <details class="howto" id="howto">
+      <summary>Hoe maak ik een Twitch-app voor de Client ID?</summary>
+      <ol>
+        <li>Open <a href="https://dev.twitch.tv/console/apps" target="_blank" rel="noopener">dev.twitch.tv/console/apps</a> en klik op <b>Register Your Application</b> (Toepassing registreren). Je hebt tweestapsverificatie op je Twitch-account nodig.</li>
+        <li><b>Naam:</b> vrij te kiezen, bijv. <i>Modview Dave</i>.</li>
+        <li><b>OAuth Redirect URL</b> (omleidings-URL), precies zo, met de slash aan het eind:<br>
+          <span class="copyline"><code id="redirectUrl"></code><button type="button" id="copyRedirect">Kopieer</button></span></li>
+        <li><b>Categorie:</b> kies <b>Chat Bot</b>.</li>
+        <li><b>Clienttype:</b> kies <b>Openbaar / Public</b>. Niet <i>Vertrouwelijk / Confidential</i>.</li>
+        <li>Klik op <b>Create</b> (Maken), daarna bij je app op <b>Manage</b> (Beheren).</li>
+        <li>Kopieer de <b>Client ID</b> en plak hem hierboven. Klik dan op <b>Inloggen met Twitch</b>.</li>
+      </ol>
+    </details>
     <div class="row" style="justify-content:flex-start">
       <button class="primary" id="loginBtn">Inloggen met Twitch</button>
       <button id="logoutBtn">Uitloggen</button>
@@ -1516,7 +1536,8 @@
     state.shortcuts = state.shortcuts.filter((s) => s !== editing);
     saveShortcuts(); renderShortcuts(); closeModal('scModal');
   };
-  $('#settingsBtn').onclick = () => { $('#clientId').value = state.clientId; $('#tokenPaste').value = ''; renderShortcuts(); renderAccount(); openModal('setModal'); };
+  $('#settingsBtn').onclick = () => {
+    $('#howto').open = !state.me; $('#clientId').value = state.clientId; $('#tokenPaste').value = ''; renderShortcuts(); renderAccount(); openModal('setModal'); };
   $('#loginBtn').onclick = login;
   $('#logoutBtn').onclick = logout;
   $('#tokenSave').onclick = async () => {
@@ -1553,6 +1574,10 @@
 
   // ---------- start ----------
   $('#redirectUrl').textContent = redirectUri;
+  $('#copyRedirect').onclick = async () => {
+    try { await navigator.clipboard.writeText(redirectUri); toast('Redirect URL gekopieerd.', 'ok'); }
+    catch { toast('Kopiëren lukte niet; selecteer de tekst en kopieer hem zelf.', 'err'); }
+  };
   readTokenFromHash();
   renderShortcuts();
   renderTabs();
