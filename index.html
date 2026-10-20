@@ -16,6 +16,8 @@
   button { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line);
     border-radius: 6px; padding: 5px 10px; cursor: pointer; }
   button:hover { border-color: var(--accent); }
+  a.btn { display: inline-block; text-decoration: none; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; }
+  a.btn:hover { border-color: var(--accent); }
   button.primary { background: var(--accent); border-color: var(--accent); }
   button.primary:hover { background: var(--accent2); }
   button.icon { padding: 2px 7px; background: transparent; border-color: transparent; color: var(--muted); }
@@ -229,6 +231,7 @@
     <div class="row" style="justify-content:flex-start">
       <button class="primary" id="loginBtn">Inloggen met Twitch</button>
       <button id="logoutBtn">Uitloggen</button>
+      <a class="btn" href="https://dev.twitch.tv/console/apps" target="_blank" rel="noopener" title="Je Twitch-apps beheren (Client ID, redirect)">Twitch-apps ↗</a>
     </div>
     <label for="tokenPaste">Of plak een access token</label>
     <input id="tokenPaste" autocomplete="off" placeholder="token zonder 'oauth:'">
