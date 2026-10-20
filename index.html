@@ -27,7 +27,7 @@
   input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
 
   #app { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-  header, #selInfo { flex-shrink: 0; }
+  header { flex-shrink: 0; }
   header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--panel);
     border-bottom: 1px solid var(--line); flex-wrap: wrap; }
   header h1 { font-size: 15px; margin: 0 8px 0 0; white-space: nowrap; }
@@ -38,7 +38,8 @@
   .sc.user-action { border-color: #5a3d99; }
   #account { color: var(--muted); font-size: 12px; white-space: nowrap; }
   #account.on { color: var(--ok); }
-  #selInfo { font-size: 12px; color: var(--muted); padding: 4px 12px; background: var(--panel); border-bottom: 1px solid var(--line); min-height: 26px; }
+  #selInfo { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+  #selInfo:empty { display: none; }
   #selInfo b { color: var(--text); }
 
   #zones { flex: 1; display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; overflow: auto; align-content: flex-start; }
@@ -162,11 +163,11 @@
     <button id="addZoneBtn" title="Zone toevoegen in dit tabblad">+ Zone</button>
     <div id="shortcutBar"></div>
     <button id="addScBtn" class="primary" title="Sneltoets toevoegen">+ Sneltoets</button>
+    <span id="selInfo"></span>
     <span id="account">niet ingelogd</span>
     <button id="settingsBtn" title="Instellingen">⚙</button>
   </header>
   <nav id="tabs"></nav>
-  <div id="selInfo">Klik op een chatbericht om iemand te selecteren. <kbd>Esc</kbd> heft de selectie op.</div>
   <div id="zones"></div>
 </div>
 
@@ -654,7 +655,7 @@
       el.innerHTML = '<span class="user">' + esc(b.textContent) + '</span>';
       state.sel && state.sel.el.classList.remove('sel');
       state.sel = { channel: z.channel, user: b.dataset.login, userId: b.dataset.id, msgId: '', el };
-      $('#selInfo').innerHTML = 'Geselecteerd: <b>' + esc(b.dataset.login) + '</b> in <b>' + esc(z.channel) + '</b>.';
+      $('#selInfo').innerHTML = 'Geselecteerd: <b>' + esc(b.dataset.login) + '</b>';
       openCard(z.channel, el, e.clientX, e.clientY);
     });
     loadUsers(zone);
@@ -1227,12 +1228,12 @@
     state.sel = { channel: ch, user: el.dataset.user, userId: el.dataset.userId, msgId: el.dataset.id, el };
     el.classList.add('sel');
     setActive(ch);
-    $('#selInfo').innerHTML = 'Geselecteerd: <b>' + esc(el.dataset.user) + '</b> in <b>' + esc(ch) + '</b>. Gebruik een sneltoets of knop. <kbd>Esc</kbd> om op te heffen.';
+    $('#selInfo').innerHTML = 'Geselecteerd: <b>' + esc(el.dataset.user) + '</b> <kbd>Esc</kbd>';
   }
   function clearSel() {
     if (state.sel) state.sel.el.classList.remove('sel');
     state.sel = null;
-    $('#selInfo').innerHTML = 'Klik op een chatbericht om iemand te selecteren. <kbd>Esc</kbd> heft de selectie op.';
+    $('#selInfo').innerHTML = '';
   }
 
   // ---------- acties ----------
