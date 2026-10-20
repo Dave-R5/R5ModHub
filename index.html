@@ -46,7 +46,13 @@
   #selInfo:empty { display: none; }
   #selInfo b { color: var(--text); }
 
-  #zones { flex: 1; display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; overflow: auto; align-content: flex-start; }
+  #zones { flex: 1; display: block; padding: 8px; overflow: auto; }
+  .canvas { display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; align-items: flex-start; position: relative; }
+  #zones.free .canvas { display: block; }
+  #zones.free .canvas > .zone { position: absolute; }
+  #zones.free .zone.moving { box-shadow: 0 10px 30px rgba(0,0,0,.6); opacity: .92; }
+  .snapline { position: absolute; background: var(--accent); pointer-events: none; z-index: 9999; }
+  #tidyBtn { white-space: nowrap; }
   .zone { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
     width: 360px; height: calc(100vh - 160px); min-width: 240px; min-height: 200px; resize: both; overflow: hidden; }
   .zone.active { border-color: var(--accent); }
@@ -190,6 +196,7 @@
   @media (max-width: 768px) {
     #shortcutBar, header h1 { display: none; }
     #cloudInd { font-size: 0; } #cloudInd::before { content: '☁'; font-size: 16px; }
+    #tidyBtn { display: none; }
     #viewBtn, #modlogBtn { font-size: 0; } #viewBtn::before { content: '▣'; font-size: 16px; } #modlogBtn::before { content: '📋'; font-size: 16px; }
     header { gap: 6px; }
     #selInfo { max-width: 40vw; }
@@ -286,6 +293,7 @@
   <header>
     <h1>R5 ModHub</h1>
     <button id="addZoneBtn" title="Zone toevoegen in dit tabblad">+ Zone</button>
+    <button id="tidyBtn" title="Alle blokken in dit tabblad automatisch netjes naast elkaar zetten">▦ Schikken</button>
     <div id="shortcutBar"></div>
     <button id="addScBtn" class="primary" title="Sneltoetsen bewerken of verwijderen">✎ Sneltoetsen</button>
     <button id="cloudInd" hidden title="Cloud-back-up (klik voor instellingen)"></button>
@@ -748,6 +756,7 @@
   function dragReorder(handle, item, selector, commit, allowUnder) {
     handle.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || e.target.closest('button')) return;
+      if (handle.classList.contains('zone-head') && freeMode()) return;
       const sx = e.clientX, sy = e.clientY;
       let on = false, target = null, after = false, under = false;
       const clear = () => document.querySelectorAll('.drop-before, .drop-after, .drop-under').forEach((x) => x.classList.remove('drop-before', 'drop-after', 'drop-under'));
@@ -878,6 +887,11 @@
       wrap.insertAdjacentHTML('beforeend', '<div id="emptyHint"><p>Dit tabblad is nog leeg.</p><p>Klik op <b>+ Zone</b> om een chat of streamweergave toe te voegen. Probeer <b>demo</b> om alles te testen zonder in te loggen.</p></div>');
       return;
     }
+    // eerst automatisch schikken (naast elkaar, met kolommen); daarna staat elk blok vrij waar je het neerzet
+    const canvas = document.createElement('div');
+    canvas.className = 'canvas';
+    wrap.appendChild(canvas);
+    wrap.classList.remove('free');
     let col = null;
     zones.forEach((z, i) => {
       const k = keyOf(z);
@@ -885,20 +899,122 @@
       const el = zoneEls[k].root;
       el.style.width = z.w ? z.w + 'px' : '';
       el.style.height = z.h ? z.h + 'px' : '';
+      el.style.left = el.style.top = el.style.zIndex = '';
       zoneEls[k].tabZone = z;
       // zones met "under" komen in dezelfde kolom onder de vorige
       if (z.under && i > 0) {
-        if (!col) { col = document.createElement('div'); col.className = 'zcol'; wrap.lastChild.replaceWith(col); col.appendChild(zoneEls[keyOf(zones[i - 1])].root); }
+        if (!col) { col = document.createElement('div'); col.className = 'zcol'; canvas.lastChild.replaceWith(col); col.appendChild(zoneEls[keyOf(zones[i - 1])].root); }
         col.appendChild(el);
-      } else { col = null; wrap.appendChild(el); }
-      if (zoneEls[k].redraw) requestAnimationFrame(zoneEls[k].redraw);
-      if (zoneEls[k].msgs && zoneEls[k].stick) zoneEls[k].msgs.scrollTop = zoneEls[k].msgs.scrollHeight;
+      } else { col = null; canvas.appendChild(el); }
+    });
+    if (!isMobile()) placeFree(wrap, canvas, zones);
+    zones.forEach((z) => {
+      const ze = zoneEls[keyOf(z)];
+      if (ze.redraw) requestAnimationFrame(ze.redraw);
+      if (ze.msgs && ze.stick) ze.msgs.scrollTop = ze.msgs.scrollHeight;
     });
     const isChat = (z) => !z.kind || z.kind === 'chat';
     const firstChat = zones.find(isChat);
     const keep = state.active && zones.some((z) => isChat(z) && z.channel === state.active);
     setActive(keep ? state.active : firstChat ? firstChat.channel : null);
     if (state.mview && state.mview.tabId === state.tab) renderMobile();
+  }
+
+  // ---------- vrij plaatsen ----------
+  const GRID = 8, SNAP = 12;
+  const freeMode = () => $('#zones').classList.contains('free');
+  function zoneRect(z) { const el = zoneEls[keyOf(z)].root; return { x: z.x, y: z.y, w: el.offsetWidth, h: el.offsetHeight }; }
+  function placeFree(wrap, canvas, zones) {
+    const cr = canvas.getBoundingClientRect();
+    const allNew = zones.every((z) => z.x == null);
+    // eerste keer: de automatische indeling overnemen zodat er niets verspringt
+    if (allNew) zones.forEach((z) => { const r = zoneEls[keyOf(z)].root.getBoundingClientRect(); z.x = Math.round(r.left - cr.left); z.y = Math.round(r.top - cr.top); });
+    const fresh = zones.filter((z) => z.x == null);
+    // kolommen opheffen: alle blokken los op het canvas
+    zones.forEach((z) => canvas.appendChild(zoneEls[keyOf(z)].root));
+    canvas.querySelectorAll('.zcol').forEach((c) => c.remove());
+    wrap.classList.add('free');
+    zones.forEach((z) => { if (z.x != null) applyPos(z); });
+    // nieuwe blokken op de eerste vrije plek
+    fresh.forEach((z) => {
+      const el = zoneEls[keyOf(z)].root;
+      const rects = zones.filter((o) => o !== z && o.x != null).map(zoneRect);
+      let spot = findSpot(el.offsetWidth, el.offsetHeight, rects, canvas.clientWidth);
+      // hoort hij onder het vorige blok (zoals de grafiek onder de stream), dan daar als het past
+      const prev = zones[zones.indexOf(z) - 1];
+      if (z.under && prev && prev.x != null) {
+        const pr = zoneRect(prev), t = { x: pr.x, y: pr.y + pr.h + GRID };
+        if (!rects.some((r) => t.x < r.x + r.w && t.x + el.offsetWidth > r.x && t.y < r.y + r.h && t.y + el.offsetHeight > r.y)) spot = t;
+      }
+      z.x = spot.x; z.y = spot.y; applyPos(z);
+    });
+    if (allNew || fresh.length) saveTabs();
+    fitCanvas();
+  }
+  function applyPos(z) {
+    const el = zoneEls[keyOf(z)].root;
+    el.style.left = z.x + 'px'; el.style.top = z.y + 'px'; el.style.zIndex = z.z || '';
+  }
+  function findSpot(w, h, rects, width) {
+    const hit = (x, y) => rects.some((r) => x < r.x + r.w + GRID && x + w + GRID > r.x && y < r.y + r.h + GRID && y + h + GRID > r.y);
+    const maxY = rects.reduce((m, r) => Math.max(m, r.y + r.h), 0);
+    for (let y = 0; y <= maxY; y += GRID) for (let x = 0; x + w <= Math.max(width, w); x += GRID) if (!hit(x, y)) return { x, y };
+    return { x: 0, y: maxY + GRID };
+  }
+  function fitCanvas() {
+    const canvas = $('#zones .canvas');
+    if (!canvas || !freeMode()) return;
+    let w = 0, h = 0;
+    curTab().zones.forEach((z) => { const el = zoneEls[keyOf(z)] && zoneEls[keyOf(z)].root; if (el && el.parentNode === canvas) { w = Math.max(w, z.x + el.offsetWidth); h = Math.max(h, z.y + el.offsetHeight); } });
+    canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  }
+  // blok slepen naar elke plek, met magneet naar randen van andere blokken en een raster van 8 px
+  function freeDrag(zone, e) {
+    const z = zone.tabZone, root = zone.root;
+    if (!z || z.x == null) return;
+    const sx = e.clientX, sy = e.clientY, ox = z.x, oy = z.y, w = root.offsetWidth, h = root.offsetHeight;
+    const others = curTab().zones.filter((o) => o !== z && o.x != null && zoneEls[keyOf(o)]).map(zoneRect);
+    // kandidaten [positie, waar de hulplijn komt]
+    const xs = [[0, 0]], ys = [[0, 0]];
+    others.forEach((r) => {
+      xs.push([r.x, r.x], [r.x + r.w + GRID, r.x + r.w], [r.x + r.w - w, r.x + r.w], [r.x - w - GRID, r.x]);
+      ys.push([r.y, r.y], [r.y + r.h + GRID, r.y + r.h], [r.y + r.h - h, r.y + r.h], [r.y - h - GRID, r.y]);
+    });
+    const canvas = root.parentNode;
+    const lx = document.createElement('div'), ly = document.createElement('div');
+    lx.className = ly.className = 'snapline';
+    let moved = false, nx = ox, ny = oy;
+    z.z = Math.max(0, ...curTab().zones.map((o) => o.z || 0)) + 1;
+    root.style.zIndex = z.z;
+    const snap = (v, cands) => { let best = null; cands.forEach((c) => { if (c[0] >= 0 && Math.abs(v - c[0]) < SNAP && (!best || Math.abs(v - c[0]) < Math.abs(v - best[0]))) best = c; }); return best; };
+    const move = (ev) => {
+      if (!moved) {
+        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
+        moved = true; root.classList.add('moving'); document.body.classList.add('resizing', 'reordering');
+        canvas.appendChild(lx); canvas.appendChild(ly);
+      }
+      ev.preventDefault();
+      const rx = ox + ev.clientX - sx, ry = oy + ev.clientY - sy;
+      const snx = snap(rx, xs), sny = snap(ry, ys);
+      nx = Math.max(0, snx ? snx[0] : Math.round(rx / GRID) * GRID);
+      ny = Math.max(0, sny ? sny[0] : Math.round(ry / GRID) * GRID);
+      root.style.left = nx + 'px'; root.style.top = ny + 'px';
+      // hulplijnen als hij ergens op uitlijnt
+      lx.style.display = snx ? '' : 'none'; lx.style.left = (snx ? snx[1] : 0) + 'px'; lx.style.top = '0'; lx.style.width = '2px'; lx.style.height = canvas.scrollHeight + 'px';
+      ly.style.display = sny ? '' : 'none'; ly.style.top = (sny ? sny[1] : 0) + 'px'; ly.style.left = '0'; ly.style.height = '2px'; ly.style.width = canvas.scrollWidth + 'px';
+    };
+    const up = () => {
+      removeEventListener('pointermove', move, true); removeEventListener('pointerup', up, true); removeEventListener('pointercancel', up, true);
+      lx.remove(); ly.remove();
+      root.classList.remove('moving'); document.body.classList.remove('resizing', 'reordering');
+      if (moved) { z.x = nx; z.y = ny; }
+      saveTabs(); fitCanvas();
+    };
+    addEventListener('pointermove', move, true); addEventListener('pointerup', up, true); addEventListener('pointercancel', up, true);
+  }
+  function tidyTab() {
+    curTab().zones.forEach((z) => { delete z.x; delete z.y; delete z.z; });
+    saveTabs(); renderZones();
   }
 
   // ---------- mobiele weergave ----------
@@ -1005,6 +1121,11 @@
 
     // vrij indelen: slepen aan de kop om te verplaatsen, rechtsonder slepen om te vergroten
     const head = root.querySelector('.zone-head');
+    head.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.target.closest('button') || !freeMode() || root.closest('#mview')) return;
+      e.preventDefault();
+      freeDrag(zone, e);
+    });
     dragReorder(head, root, '#zones .zone', (target, after, under) => {
       const zones = curTab().zones;
       const to = Object.values(zoneEls).find((x) => x.root === target);
@@ -1031,7 +1152,7 @@
       const zz = zone.tabZone;
       if (!zz || !root.isConnected || !root.offsetWidth || isMobile() || root.closest('#mview')) return;
       zz.w = Math.round(root.offsetWidth); zz.h = Math.round(root.offsetHeight);
-      clearTimeout(zone.saveT); zone.saveT = setTimeout(saveTabs, 300);
+      clearTimeout(zone.saveT); zone.saveT = setTimeout(() => { saveTabs(); fitCanvas(); }, 300);
     }).observe(root);
     return zone;
   }
@@ -2512,6 +2633,7 @@
   $('#zoneSave').onclick = () => { addZone($('#zoneName').value, $('#zoneKind').value); closeModal('zoneModal'); };
   $('#zoneName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#zoneSave').click(); });
   $('#viewBtn').onclick = () => openViewPicker();
+  $('#tidyBtn').onclick = () => { if (confirm('Alle blokken in dit tabblad automatisch netjes naast elkaar zetten?')) tidyTab(); };
   $('#addScBtn').onclick = () => { renderShortcuts(); openModal('scListModal'); };
   $('#scNewBtn').onclick = () => { closeModal('scListModal'); backToList = true; openScModal(null); };
   $('#scType').onchange = updateScFields;
