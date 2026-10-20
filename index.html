@@ -346,7 +346,7 @@
       <button data-view="video"><b>📺 Video + chat</b><small>Stream bovenaan, chat eronder</small></button>
       <button data-view="mod"><b>🛡️ Modmodus</b><small>Chat met grote knoppen voor timeout, ban en verwijderen</small></button>
     </div>
-    <p class="hint">Onderin wissel je altijd tussen Chat, Kijkers en Knoppen (je sneltoetsen en chatcommando's).</p>
+    <p class="hint">Onderin wissel je altijd tussen Chat, Knoppen en Kijkers (je sneltoetsen en chatcommando's).</p>
     <div class="row"><button data-view="desktop">Vrije indeling (zones)</button></div>
   </div>
 </div>
@@ -742,7 +742,7 @@
     }
     const bar = document.createElement('div');
     bar.className = 'mv-bar';
-    [['chat', '💬 Chat'], ['users', '👥 Kijkers'], ['buttons', '⚡ Knoppen']].forEach(([k, label]) => {
+    [['chat', '💬 Chat'], ['buttons', '⚡ Knoppen'], ['users', '👥 Kijkers']].forEach(([k, label]) => {
       const b = document.createElement('button');
       b.textContent = label;
       if (state.mview.pane === k) b.className = 'on';
