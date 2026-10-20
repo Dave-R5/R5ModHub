@@ -1,0 +1,967 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Modweergave</title>
+<style>
+  :root {
+    --bg: #0e0e10; --panel: #18181b; --panel2: #1f1f23; --line: #2e2e35;
+    --text: #efeff1; --muted: #a0a0ab; --accent: #9147ff; --accent2: #772ce8;
+    --danger: #eb0400; --ok: #00c853; --sel: #3a2a5c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  button { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); }
+  button.primary:hover { background: var(--accent2); }
+  button.icon { padding: 2px 7px; background: transparent; border-color: transparent; color: var(--muted); }
+  button.icon:hover { color: var(--text); border-color: var(--line); }
+  input, select, textarea { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 8px; width: 100%; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+
+  #app { display: flex; flex-direction: column; height: 100%; }
+  header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--panel);
+    border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0 8px 0 0; white-space: nowrap; }
+  #shortcutBar { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; align-items: center; }
+  .sc { display: inline-flex; align-items: center; gap: 6px; }
+  .sc kbd, kbd { font: 11px ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line);
+    border-radius: 4px; padding: 0 5px; color: var(--muted); }
+  .sc.user-action { border-color: #5a3d99; }
+  #account { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  #account.on { color: var(--ok); }
+  #selInfo { font-size: 12px; color: var(--muted); padding: 4px 12px; background: var(--panel); border-bottom: 1px solid var(--line); min-height: 26px; }
+  #selInfo b { color: var(--text); }
+
+  #zones { flex: 1; display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; overflow: auto; align-content: flex-start; }
+  .zone { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    width: 360px; height: calc(100vh - 160px); min-width: 240px; min-height: 200px; resize: both; overflow: hidden; }
+  .zone.active { border-color: var(--accent); }
+  .zone.dragover { outline: 2px dashed var(--accent); }
+  .zone-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--line);
+    cursor: grab; user-select: none; background: var(--panel2); }
+  .zone-head .name { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .zone-head .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .zone-head .dot.live { background: var(--ok); }
+  .msgs { flex: 1; overflow-y: auto; padding: 4px 0; }
+  .msg { padding: 2px 8px; word-wrap: break-word; cursor: pointer; border-left: 3px solid transparent; }
+  .msg:hover { background: #26262c; }
+  .msg.sel { background: var(--sel); border-left-color: var(--accent); }
+  .msg.deleted .text { text-decoration: line-through; color: var(--muted); }
+  .msg.sys { color: var(--muted); font-style: italic; cursor: default; }
+  .msg .time { color: var(--muted); font-size: 11px; margin-right: 4px; }
+  .msg .badge { font-size: 10px; border-radius: 3px; padding: 0 3px; margin-right: 3px; vertical-align: 1px; font-weight: 700; }
+  .badge.b { background: #e91916; } .badge.m { background: #00ad03; } .badge.v { background: #e005b9; } .badge.s { background: #6441a5; }
+  .msg .user { font-weight: 700; }
+  .msg img.emote { height: 24px; vertical-align: middle; margin: -4px 0; }
+  .paused { text-align: center; font-size: 12px; background: var(--accent); cursor: pointer; padding: 3px; }
+  .zone-foot { padding: 6px; border-top: 1px solid var(--line); }
+
+  #tabs { display: flex; gap: 2px; padding: 6px 12px 0; background: var(--panel); border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .tab { display: flex; align-items: center; gap: 4px; padding: 6px 12px; border: 1px solid transparent; border-bottom: 0;
+    border-radius: 6px 6px 0 0; color: var(--muted); cursor: pointer; white-space: nowrap; user-select: none; }
+  .tab:hover { color: var(--text); }
+  .tab.on { background: var(--bg); border-color: var(--line); color: var(--text); margin-bottom: -1px; }
+  .tab .tclose { padding: 0 4px; font-size: 11px; }
+  .tadd { white-space: nowrap; }
+  .zone.stream { width: 640px; height: 400px; background: #000; }
+  .zone.stream .player { flex: 1; border: 0; width: 100%; }
+  .zone.buttons { align-self: flex-start; width: auto; height: auto; min-width: 0; min-height: 0; max-width: 100%; }
+  .zone.buttons .dot, .zone.buttons [data-act=open], .zone.buttons [data-act=close] { display: none; }
+  .pad { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; overflow: auto; align-content: flex-start; }
+  .sq { width: 1.5cm; height: 1.5cm; min-width: 48px; min-height: 48px; padding: 4px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 2px; font-size: 12px; line-height: 1.1; text-align: center;
+    overflow: hidden; word-break: break-word; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .sq:active { transform: scale(.94); background: var(--accent); }
+  .sq.user-action { border-color: #5a3d99; }
+  .sq kbd { font-size: 9px; padding: 0 3px; }
+  .sq.add { border-style: dashed; color: var(--muted); font-size: 22px; }
+  .player-off { margin: auto; padding: 16px; text-align: center; color: var(--muted); max-width: 320px; }
+  #emptyHint { margin: auto; text-align: center; color: var(--muted); max-width: 420px; }
+
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 10; padding: 16px; }
+  .modal-bg.open { display: flex; }
+  .modal { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; width: 100%; max-width: 460px; max-height: 90vh; overflow-y: auto; }
+  .modal h2 { margin: 0 0 12px; font-size: 16px; }
+  .modal label { display: block; margin: 10px 0 4px; font-size: 12px; color: var(--muted); }
+  .modal .row { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; flex-wrap: wrap; }
+  .modal .hint { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+  .modal hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
+  .keycap { text-align: center; cursor: pointer; }
+  .keycap.listening { border-color: var(--accent); color: var(--accent); }
+  .sc-list { list-style: none; padding: 0; margin: 0; }
+  .sc-list li { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+  .sc-list li span { flex: 1; }
+
+  #toasts { position: fixed; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; z-index: 20; }
+  .toast { background: var(--panel2); border: 1px solid var(--line); border-left: 4px solid var(--accent); padding: 8px 12px; border-radius: 6px; max-width: 360px; font-size: 13px; }
+  .toast.err { border-left-color: var(--danger); }
+  .toast.ok { border-left-color: var(--ok); }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Modweergave</h1>
+    <button id="addZoneBtn" title="Zone toevoegen in dit tabblad">+ Zone</button>
+    <div id="shortcutBar"></div>
+    <button id="addScBtn" class="primary" title="Sneltoets toevoegen">+ Sneltoets</button>
+    <span id="account">niet ingelogd</span>
+    <button id="settingsBtn" title="Instellingen">⚙</button>
+  </header>
+  <nav id="tabs"></nav>
+  <div id="selInfo">Klik op een chatbericht om iemand te selecteren. <kbd>Esc</kbd> heft de selectie op.</div>
+  <div id="zones"></div>
+</div>
+
+<!-- Kanaal toevoegen -->
+<div class="modal-bg" id="zoneModal">
+  <div class="modal">
+    <h2>Zone toevoegen</h2>
+    <label for="zoneKind">Soort zone</label>
+    <select id="zoneKind">
+      <option value="chat">Chat (lezen en modereren)</option>
+      <option value="stream">Streamweergave (video)</option>
+    </select>
+    <div id="zoneNameWrap">
+    <label for="zoneName">Kanaalnaam (zoals in twitch.tv/<b>naam</b>)</label>
+    <input id="zoneName" placeholder="bijv. streamernaam" autocomplete="off">
+    <p class="hint">Typ <b>demo</b> voor een nepchat om alles uit te proberen zonder in te loggen.</p>
+    </div>
+    <div class="row">
+      <button data-close>Annuleren</button>
+      <button class="primary" id="zoneSave">Toevoegen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sneltoets toevoegen/bewerken -->
+<div class="modal-bg" id="scModal">
+  <div class="modal">
+    <h2 id="scTitle">Sneltoets toevoegen</h2>
+    <label for="scName">Naam op de knop</label>
+    <input id="scName" placeholder="bijv. Regels" autocomplete="off">
+    <label for="scType">Wat doet hij?</label>
+    <select id="scType">
+      <option value="msg">Chatbericht versturen</option>
+      <option value="timeout">Timeout geven</option>
+      <option value="ban">Bannen</option>
+      <option value="unban">Ban opheffen</option>
+      <option value="delete">Bericht verwijderen</option>
+    </select>
+    <div id="scMsgFields">
+      <label for="scText">Bericht</label>
+      <textarea id="scText" rows="2" placeholder="bijv. !rules of @{user} lees de regels even"></textarea>
+      <p class="hint"><b>{user}</b> wordt vervangen door de geselecteerde gebruiker.</p>
+    </div>
+    <div id="scDurFields">
+      <label for="scDur">Duur</label>
+      <select id="scDur">
+        <option value="10">10 seconden</option>
+        <option value="60">1 minuut</option>
+        <option value="300">5 minuten</option>
+        <option value="600" selected>10 minuten</option>
+        <option value="1800">30 minuten</option>
+        <option value="3600">1 uur</option>
+        <option value="86400">1 dag</option>
+        <option value="604800">1 week</option>
+      </select>
+    </div>
+    <div id="scReasonFields">
+      <label for="scReason">Reden (optioneel)</label>
+      <input id="scReason" autocomplete="off">
+    </div>
+    <label>Toets (optioneel)</label>
+    <button id="scKey" class="keycap" type="button">Klik en druk op een toets</button>
+    <p class="hint">Bijv. F1, Ctrl+1 of Alt+T. Klik nogmaals en druk op Backspace om te wissen.</p>
+    <div class="row">
+      <button id="scDelete" style="margin-right:auto;color:var(--danger)">Verwijderen</button>
+      <button data-close>Annuleren</button>
+      <button class="primary" id="scSave">Opslaan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Instellingen -->
+<div class="modal-bg" id="setModal">
+  <div class="modal">
+    <h2>Instellingen</h2>
+    <div id="loginState" class="hint"></div>
+    <label for="clientId">Twitch Client ID</label>
+    <input id="clientId" autocomplete="off" placeholder="van dev.twitch.tv/console/apps">
+    <p class="hint">Zet als OAuth Redirect URL in je Twitch-app: <b id="redirectUrl"></b></p>
+    <div class="row" style="justify-content:flex-start">
+      <button class="primary" id="loginBtn">Inloggen met Twitch</button>
+      <button id="logoutBtn">Uitloggen</button>
+    </div>
+    <label for="tokenPaste">Of plak een access token</label>
+    <input id="tokenPaste" autocomplete="off" placeholder="token zonder 'oauth:'">
+    <div class="row" style="justify-content:flex-start"><button id="tokenSave">Token gebruiken</button></div>
+    <hr>
+    <label>Sneltoetsen</label>
+    <ul class="sc-list" id="scList"></ul>
+    <hr>
+    <label>Back-up</label>
+    <div class="row" style="justify-content:flex-start">
+      <button id="exportBtn">Exporteren</button>
+      <button id="importBtn">Importeren</button>
+      <input type="file" id="importFile" accept=".json" hidden>
+    </div>
+    <div class="row"><button data-close>Sluiten</button></div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+(() => {
+  'use strict';
+  const SCOPES = ['chat:read', 'chat:edit', 'moderator:manage:banned_users', 'moderator:manage:chat_messages'];
+  const MAX_MSGS = 300;
+  const TYPE_LABEL = { msg: 'Chatbericht', timeout: 'Timeout', ban: 'Ban', unban: 'Unban', delete: 'Verwijderen' };
+  const USER_TYPES = ['timeout', 'ban', 'unban', 'delete'];
+  const $ = (s) => document.querySelector(s);
+
+  // ---------- opslag ----------
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('modv.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem('modv.' + k, JSON.stringify(v)); } catch {} },
+    del(k) { try { localStorage.removeItem('modv.' + k); } catch {} },
+  };
+  const state = {
+    tabs: loadTabs(),                        // [{id, name, zones: [{channel, kind, w, h}]}]
+    tab: store.get('tab', null),
+    shortcuts: store.get('shortcuts', []),   // [{id, name, type, text, dur, reason, key}]
+    clientId: store.get('clientId', ''),
+    token: store.get('token', ''),
+    me: null,                                // {login, user_id, client_id}
+    active: null,                            // kanaal van actieve zone
+    sel: null,                               // {channel, user, userId, msgId, el}
+  };
+  if (!state.tabs.some((t) => t.id === state.tab)) state.tab = state.tabs[0].id;
+  const saveTabs = () => store.set('tabs', state.tabs);
+  const curTab = () => state.tabs.find((t) => t.id === state.tab);
+  function loadTabs() {
+    const t = store.get('tabs', null);
+    if (Array.isArray(t) && t.length) return t;
+    // oude versie: losse lijst zones wordt het eerste tabblad
+    return [{ id: 't1', name: 'Hoofd', zones: store.get('zones', []).map((z) => ({ kind: 'chat', ...z })) }];
+  }
+  const saveShortcuts = () => store.set('shortcuts', state.shortcuts);
+
+  // ---------- meldingen ----------
+  function toast(text, kind) {
+    const el = document.createElement('div');
+    el.className = 'toast' + (kind ? ' ' + kind : '');
+    el.textContent = text;
+    $('#toasts').appendChild(el);
+    setTimeout(() => el.remove(), kind === 'err' ? 6000 : 3000);
+  }
+
+  // ---------- inloggen ----------
+  const redirectUri = location.origin + location.pathname;
+
+  function readTokenFromHash() {
+    if (!location.hash.includes('access_token=')) return;
+    const p = new URLSearchParams(location.hash.slice(1));
+    state.token = p.get('access_token');
+    store.set('token', state.token);
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+
+  async function validate() {
+    if (!state.token) { state.me = null; renderAccount(); return; }
+    try {
+      const r = await fetch('https://id.twitch.tv/oauth2/validate', { headers: { Authorization: 'OAuth ' + state.token } });
+      if (!r.ok) throw new Error('token ongeldig of verlopen');
+      state.me = await r.json();
+    } catch (e) {
+      state.me = null;
+      toast('Inloggen mislukt: ' + e.message, 'err');
+    }
+    renderAccount();
+  }
+
+  function renderAccount() {
+    const a = $('#account');
+    if (state.me) { a.textContent = '● ' + state.me.login; a.className = 'on'; }
+    else { a.textContent = 'niet ingelogd'; a.className = ''; }
+    $('#loginState').innerHTML = state.me
+      ? 'Ingelogd als <b>' + esc(state.me.login) + '</b>. Modacties werken in kanalen waar je mod bent.'
+      : 'Niet ingelogd: je kunt chats lezen, maar niets versturen of modereren.';
+  }
+
+  function login() {
+    const id = $('#clientId').value.trim();
+    if (!id) return toast('Vul eerst je Client ID in.', 'err');
+    if (location.protocol === 'file:') return toast('Inloggen werkt alleen als de pagina via http(s) draait (bijv. localhost of online). Plak anders een token.', 'err');
+    state.clientId = id; store.set('clientId', id);
+    const u = new URL('https://id.twitch.tv/oauth2/authorize');
+    u.search = new URLSearchParams({ client_id: id, redirect_uri: redirectUri, response_type: 'token', scope: SCOPES.join(' '), force_verify: 'true' });
+    location.href = u.toString();
+  }
+
+  function logout() {
+    state.token = ''; state.me = null; store.del('token');
+    renderAccount(); irc.reconnect();
+    toast('Uitgelogd.');
+  }
+
+  // ---------- Twitch API ----------
+  const idCache = {};
+  async function helix(method, path, params, body) {
+    if (!state.me) throw new Error('niet ingelogd');
+    const u = new URL('https://api.twitch.tv/helix/' + path);
+    if (params) u.search = new URLSearchParams(params);
+    const r = await fetch(u, {
+      method,
+      headers: { Authorization: 'Bearer ' + state.token, 'Client-Id': state.me.client_id, 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (r.status === 204) return null;
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.message || ('fout ' + r.status));
+    return j;
+  }
+  async function channelId(channel) {
+    if (idCache[channel]) return idCache[channel];
+    const j = await helix('GET', 'users', { login: channel });
+    if (!j.data.length) throw new Error('kanaal niet gevonden');
+    return (idCache[channel] = j.data[0].id);
+  }
+
+  // ---------- chat (IRC via WebSocket) ----------
+  const irc = {
+    ws: null, joined: new Set(), wantOpen: true, retry: 1000,
+    connect() {
+      const ws = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
+      this.ws = ws;
+      ws.onopen = () => {
+        this.retry = 1000;
+        ws.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
+        if (state.me) { ws.send('PASS oauth:' + state.token); ws.send('NICK ' + state.me.login); }
+        else { ws.send('NICK justinfan' + Math.floor(Math.random() * 1e6)); }
+        this.joined.clear();
+        chatChannels().forEach((c) => this.join(c));
+      };
+      ws.onmessage = (e) => e.data.split('\r\n').forEach((l) => l && handleLine(l));
+      ws.onclose = () => {
+        setLive(false);
+        if (this.ws !== ws || !this.wantOpen) return;
+        setTimeout(() => this.connect(), this.retry);
+        this.retry = Math.min(this.retry * 2, 30000);
+      };
+    },
+    reconnect() { const old = this.ws; this.ws = null; if (old) old.close(); this.connect(); },
+    send(l) { if (this.ws && this.ws.readyState === 1) this.ws.send(l); },
+    join(ch) { if (ch === 'demo' || this.joined.has(ch)) return; this.joined.add(ch); this.send('JOIN #' + ch); },
+    part(ch) { if (!this.joined.has(ch)) return; this.joined.delete(ch); this.send('PART #' + ch); },
+  };
+
+  function parseLine(line) {
+    const m = { tags: {}, prefix: '', command: '', params: [] };
+    let i = 0;
+    if (line[0] === '@') {
+      const sp = line.indexOf(' ');
+      line.slice(1, sp).split(';').forEach((kv) => {
+        const eq = kv.indexOf('=');
+        m.tags[kv.slice(0, eq)] = kv.slice(eq + 1).replace(/\\s/g, ' ').replace(/\\:/g, ';').replace(/\\\\/g, '\\');
+      });
+      i = sp + 1;
+    }
+    if (line[i] === ':') { const sp = line.indexOf(' ', i); m.prefix = line.slice(i + 1, sp); i = sp + 1; }
+    const rest = line.slice(i);
+    const ti = rest.indexOf(' :');
+    const head = ti >= 0 ? rest.slice(0, ti) : rest;
+    const parts = head.split(' ').filter(Boolean);
+    m.command = parts.shift();
+    m.params = parts;
+    if (ti >= 0) m.params.push(rest.slice(ti + 2));
+    return m;
+  }
+
+  function handleLine(line) {
+    const m = parseLine(line);
+    const ch = (m.params[0] || '').replace(/^#/, '');
+    switch (m.command) {
+      case 'PING': irc.send('PONG :' + (m.params[0] || 'tmi.twitch.tv')); break;
+      case 'JOIN': if (m.prefix.startsWith((state.me ? state.me.login : 'justinfan'))) setLive(true, ch); break;
+      case 'ROOMSTATE': setLive(true, ch); break;
+      case 'PRIVMSG': {
+        let text = m.params[1] || '';
+        const action = text.startsWith('\u0001ACTION ');
+        if (action) text = text.slice(8, -1);
+        addMsg(ch, {
+          id: m.tags.id, userId: m.tags['user-id'], user: m.prefix.split('!')[0],
+          name: m.tags['display-name'] || m.prefix.split('!')[0], color: m.tags.color,
+          badges: m.tags.badges || '', emotes: m.tags.emotes || '', text, action,
+        });
+        break;
+      }
+      case 'CLEARMSG': markDeleted(ch, (el) => el.dataset.id === m.tags['target-msg-id']); break;
+      case 'CLEARCHAT':
+        if (m.tags['target-user-id']) {
+          markDeleted(ch, (el) => el.dataset.userId === m.tags['target-user-id']);
+          const d = m.tags['ban-duration'];
+          addSys(ch, (m.params[1] || 'gebruiker') + (d ? ' kreeg een timeout van ' + fmtDur(+d) : ' is verbannen'));
+        } else addSys(ch, 'Chat is gewist');
+        break;
+      case 'NOTICE': if (ch) addSys(ch, m.params[1]); else toast(m.params[1], 'err'); break;
+    }
+  }
+
+  // ---------- tabbladen ----------
+  function renderTabs() {
+    const nav = $('#tabs');
+    nav.innerHTML = '';
+    state.tabs.forEach((t) => {
+      const b = document.createElement('div');
+      b.className = 'tab' + (t.id === state.tab ? ' on' : '');
+      b.title = 'Dubbelklik om de naam te wijzigen';
+      b.innerHTML = '<span class="tname"></span>' + (state.tabs.length > 1 ? '<button class="icon tclose" title="Tabblad sluiten">✕</button>' : '');
+      b.querySelector('.tname').textContent = t.name;
+      b.onclick = (e) => { if (!e.target.closest('.tclose')) switchTab(t.id); };
+      b.ondblclick = () => {
+        const n = prompt('Naam van het tabblad', t.name);
+        if (n && n.trim()) { t.name = n.trim().slice(0, 30); saveTabs(); renderTabs(); }
+      };
+      const x = b.querySelector('.tclose');
+      if (x) x.onclick = () => removeTab(t.id);
+      nav.appendChild(b);
+    });
+    const add = document.createElement('button');
+    add.className = 'icon tadd'; add.textContent = '+ Tabblad'; add.title = 'Tabblad toevoegen';
+    add.onclick = addTab;
+    nav.appendChild(add);
+  }
+
+  function switchTab(id) {
+    if (state.tab === id) return;
+    state.tab = id; store.set('tab', id);
+    clearSel(); state.active = null;
+    renderTabs(); renderZones();
+  }
+
+  function addTab() {
+    const n = prompt('Naam van het nieuwe tabblad', 'Tabblad ' + (state.tabs.length + 1));
+    if (n === null) return;
+    const t = { id: 't' + Date.now().toString(36), name: (n.trim() || 'Tabblad').slice(0, 30), zones: [] };
+    state.tabs.push(t); saveTabs();
+    switchTab(t.id);
+  }
+
+  function removeTab(id) {
+    const t = state.tabs.find((x) => x.id === id);
+    if (t.zones.length && !confirm('Tabblad "' + t.name + '" met ' + t.zones.length + ' zone(s) sluiten?')) return;
+    state.tabs = state.tabs.filter((x) => x !== t);
+    saveTabs();
+    if (state.tab === id) { state.tab = null; switchTab(state.tabs[0].id); } else renderTabs();
+    syncChannels();
+  }
+
+  // ---------- zones ----------
+  // Een chatzone per kanaal; staat hetzelfde kanaal in meerdere tabbladen,
+  // dan verhuist dezelfde zone mee naar het tabblad dat open is.
+  const zoneEls = {};
+  const keyOf = (z) => z.kind === 'buttons' ? 'buttons' : (z.kind === 'stream' ? 'stream:' : '') + z.channel;
+
+  function renderZones() {
+    const wrap = $('#zones');
+    wrap.innerHTML = '';
+    const zones = curTab().zones;
+    // knoppenpaneel staat altijd in het tabblad, direct naast de eerste chat
+    const fc = zones.findIndex((z) => !z.kind || z.kind === 'chat');
+    if (fc >= 0 && !zones.some((z) => z.kind === 'buttons')) {
+      zones.splice(fc + 1, 0, { kind: 'buttons', channel: 'knoppen' });
+      saveTabs();
+    }
+    if (!zones.length) {
+      wrap.innerHTML = '<div id="emptyHint"><p>Dit tabblad is nog leeg.</p><p>Klik op <b>+ Zone</b> om een chat of streamweergave toe te voegen. Probeer <b>demo</b> om alles te testen zonder in te loggen.</p></div>';
+      return;
+    }
+    zones.forEach((z) => {
+      const k = keyOf(z);
+      if (!zoneEls[k]) zoneEls[k] = z.kind === 'stream' ? buildStream(z) : z.kind === 'buttons' ? buildPad(z) : buildZone(z);
+      const el = zoneEls[k].root;
+      el.style.width = z.w ? z.w + 'px' : '';
+      el.style.height = z.h ? z.h + 'px' : '';
+      zoneEls[k].tabZone = z;
+      wrap.appendChild(el);
+      if (zoneEls[k].msgs && zoneEls[k].stick) zoneEls[k].msgs.scrollTop = zoneEls[k].msgs.scrollHeight;
+    });
+    const isChat = (z) => !z.kind || z.kind === 'chat';
+    const firstChat = zones.find(isChat);
+    const keep = state.active && zones.some((z) => isChat(z) && z.channel === state.active);
+    setActive(keep ? state.active : firstChat ? firstChat.channel : null);
+  }
+
+  function makeShell(z, title, extraBtns) {
+    const root = document.createElement('section');
+    root.className = 'zone' + (z.kind && z.kind !== 'chat' ? ' ' + z.kind : '');
+    root.innerHTML =
+      '<div class="zone-head" draggable="true"><span class="dot"></span><span class="name"></span>' + extraBtns +
+      '<button class="icon" data-act="open" title="Open stream op Twitch">↗</button>' +
+      '<button class="icon" data-act="close" title="Zone sluiten">✕</button></div>';
+    root.querySelector('.name').textContent = title;
+    const zone = { root, kind: z.kind || 'chat', channel: z.channel, dot: root.querySelector('.dot') };
+    root.querySelector('[data-act=close]').onclick = (e) => { e.stopPropagation(); removeZone(zone.tabZone); };
+    root.querySelector('[data-act=open]').onclick = () => window.open('https://twitch.tv/' + z.channel, '_blank');
+
+    // vrij indelen: slepen aan de kop om te verplaatsen, rechtsonder slepen om te vergroten
+    const head = root.querySelector('.zone-head');
+    head.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/zone', keyOf(zone.tabZone)); e.dataTransfer.effectAllowed = 'move'; });
+    root.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('text/zone')) { e.preventDefault(); root.classList.add('dragover'); } });
+    root.addEventListener('dragleave', () => root.classList.remove('dragover'));
+    root.addEventListener('drop', (e) => {
+      root.classList.remove('dragover');
+      const from = e.dataTransfer.getData('text/zone');
+      const zones = curTab().zones;
+      if (!from || from === keyOf(zone.tabZone)) return;
+      e.preventDefault();
+      const fi = zones.findIndex((x) => keyOf(x) === from);
+      if (fi < 0) return;
+      const [moved] = zones.splice(fi, 1);
+      zones.splice(zones.indexOf(zone.tabZone), 0, moved);
+      saveTabs(); renderZones();
+    });
+    new ResizeObserver(() => {
+      const zz = zone.tabZone;
+      if (!zz || !root.isConnected || !root.offsetWidth) return;
+      zz.w = Math.round(root.offsetWidth); zz.h = Math.round(root.offsetHeight);
+      clearTimeout(zone.saveT); zone.saveT = setTimeout(saveTabs, 300);
+    }).observe(root);
+    return zone;
+  }
+
+  function buildZone(z) {
+    const zone = makeShell(z, z.channel, '');
+    const root = zone.root;
+    root.dataset.channel = z.channel;
+    root.insertAdjacentHTML('beforeend',
+      '<div class="msgs"></div><div class="paused" hidden>Gepauzeerd, klik om naar beneden te gaan</div>' +
+      '<div class="zone-foot"><input placeholder="Bericht naar ' + esc(z.channel) + '…" autocomplete="off"></div>');
+    const msgs = root.querySelector('.msgs');
+    const paused = root.querySelector('.paused');
+    const input = root.querySelector('input');
+    Object.assign(zone, { msgs, paused, input, stick: true });
+
+    root.addEventListener('mousedown', () => setActive(z.channel));
+    msgs.addEventListener('scroll', () => {
+      zone.stick = msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 30;
+      paused.hidden = zone.stick;
+    });
+    paused.onclick = () => { msgs.scrollTop = msgs.scrollHeight; };
+    msgs.addEventListener('click', (e) => {
+      const el = e.target.closest('.msg');
+      if (el && el.dataset.user) select(z.channel, el);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && input.value.trim()) { sendChat(z.channel, input.value.trim()); input.value = ''; }
+    });
+    if (z.channel === 'demo') startDemo(zone);
+    return zone;
+  }
+
+  function buildStream(z) {
+    const zone = makeShell(z, '▶ ' + z.channel, '');
+    zone.dot.classList.add('live');
+    const host = location.hostname;
+    if (host && z.channel !== 'demo') {
+      const f = document.createElement('iframe');
+      f.className = 'player';
+      f.allowFullscreen = true;
+      f.allow = 'autoplay; fullscreen';
+      f.src = 'https://player.twitch.tv/?' + new URLSearchParams({ channel: z.channel, parent: host, muted: 'true' });
+      zone.root.appendChild(f);
+    } else {
+      zone.root.insertAdjacentHTML('beforeend', '<div class="player-off">' + (z.channel === 'demo'
+        ? 'Hier komt de stream van het kanaal.'
+        : 'De streamweergave werkt zodra de pagina online staat. Twitch staat afspelen vanuit een gedownload bestand niet toe.') +
+        '<br><br><button>Open stream op Twitch</button></div>');
+      zone.root.querySelector('.player-off button').onclick = () => window.open('https://twitch.tv/' + z.channel, '_blank');
+    }
+    return zone;
+  }
+
+  function buildPad(z) {
+    const zone = makeShell(z, 'Sneltoetsen', '');
+    zone.root.insertAdjacentHTML('beforeend', '<div class="pad"></div>');
+    zone.pad = zone.root.querySelector('.pad');
+    // knoppen niet laten slepen of de actieve chat laten verspringen
+    zone.pad.addEventListener('mousedown', (e) => e.preventDefault());
+    renderPad(zone);
+    return zone;
+  }
+
+  function renderPad(zone) {
+    zone.pad.innerHTML = '';
+    state.shortcuts.forEach((sc) => {
+      const b = document.createElement('button');
+      b.className = 'sq' + (USER_TYPES.includes(sc.type) ? ' user-action' : '');
+      b.title = TYPE_LABEL[sc.type] + (sc.type === 'msg' ? ': ' + sc.text : '') + ' (rechtsklik of lang indrukken om te bewerken)';
+      b.innerHTML = '<span>' + esc(sc.name) + '</span>' + (sc.key ? '<kbd>' + esc(sc.key) + '</kbd>' : '');
+      b.onclick = () => runShortcut(sc);
+      b.oncontextmenu = (e) => { e.preventDefault(); openScModal(sc); };
+      zone.pad.appendChild(b);
+    });
+    const add = document.createElement('button');
+    add.className = 'sq add'; add.textContent = '+'; add.title = 'Sneltoets toevoegen';
+    add.onclick = () => openScModal(null);
+    zone.pad.appendChild(add);
+  }
+
+  function addZone(name, kind) {
+    if (kind === 'buttons') name = 'knoppen';
+    const ch = name.trim().toLowerCase().replace(/^.*twitch\.tv\//, '').replace(/[^a-z0-9_]/g, '');
+    if (!ch) return toast('Ongeldige kanaalnaam.', 'err');
+    const zones = curTab().zones;
+    const z = { channel: ch, kind };
+    if (zones.some((x) => keyOf(x) === keyOf(z))) return toast(ch + ' staat al in dit tabblad.', 'err');
+    zones.push(z);
+    saveTabs(); renderZones(); syncChannels();
+    if (kind === 'chat') setActive(ch);
+  }
+
+  function removeZone(z) {
+    const tab = curTab();
+    tab.zones = tab.zones.filter((x) => x !== z);
+    const k = keyOf(z);
+    const stillUsed = state.tabs.some((t) => t.zones.some((x) => keyOf(x) === k));
+    if (!stillUsed && zoneEls[k]) { clearInterval(zoneEls[k].demoT); delete zoneEls[k]; }
+    if (!z.kind || z.kind === 'chat') {
+      if (state.sel && state.sel.channel === z.channel) clearSel();
+      if (state.active === z.channel) state.active = null;
+    }
+    saveTabs(); renderZones(); syncChannels();
+  }
+
+  function setActive(ch) {
+    state.active = ch;
+    Object.values(zoneEls).forEach((z) => z.root.classList.toggle('active', z.kind === 'chat' && z.channel === ch));
+  }
+
+  function setLive(on, ch) {
+    Object.values(zoneEls).forEach((z) => { if (z.kind === 'chat' && z.channel !== 'demo' && (!ch || z.channel === ch)) z.dot.classList.toggle('live', on); });
+  }
+
+  function chatChannels() {
+    const s = new Set();
+    state.tabs.forEach((t) => t.zones.forEach((z) => { if (!z.kind || z.kind === 'chat') s.add(z.channel); }));
+    return s;
+  }
+  function syncChannels() {
+    const want = chatChannels();
+    want.forEach((c) => irc.join(c));
+    [...irc.joined].forEach((c) => { if (!want.has(c)) irc.part(c); });
+  }
+
+  // ---------- berichten ----------
+  function addMsg(ch, d) {
+    const z = zoneEls[ch];
+    if (!z) return;
+    const el = document.createElement('div');
+    el.className = 'msg';
+    el.dataset.id = d.id || '';
+    el.dataset.userId = d.userId || '';
+    el.dataset.user = d.user;
+    const t = new Date();
+    let badges = '';
+    if (/broadcaster/.test(d.badges)) badges += '<span class="badge b">B</span>';
+    if (/moderator/.test(d.badges)) badges += '<span class="badge m">M</span>';
+    if (/vip/.test(d.badges)) badges += '<span class="badge v">V</span>';
+    if (/subscriber|founder/.test(d.badges)) badges += '<span class="badge s">S</span>';
+    const color = d.color || nameColor(d.user);
+    el.innerHTML = '<span class="time">' + String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') + '</span>' +
+      badges + '<span class="user" style="color:' + esc(color) + '">' + esc(d.name) + '</span>' +
+      (d.action ? ' ' : ': ') + '<span class="text"' + (d.action ? ' style="color:' + esc(color) + '"' : '') + '>' + renderText(d.text, d.emotes) + '</span>';
+    appendTo(z, el);
+  }
+
+  function addSys(ch, text) {
+    const z = zoneEls[ch];
+    if (!z) return;
+    const el = document.createElement('div');
+    el.className = 'msg sys';
+    el.textContent = text;
+    appendTo(z, el);
+  }
+
+  function appendTo(z, el) {
+    z.msgs.appendChild(el);
+    while (z.msgs.children.length > MAX_MSGS) {
+      const first = z.msgs.firstChild;
+      if (state.sel && state.sel.el === first) clearSel();
+      first.remove();
+    }
+    if (z.stick) z.msgs.scrollTop = z.msgs.scrollHeight;
+  }
+
+  function markDeleted(ch, match) {
+    const z = zoneEls[ch];
+    if (!z) return;
+    z.msgs.querySelectorAll('.msg').forEach((el) => { if (match(el)) el.classList.add('deleted'); });
+  }
+
+  function renderText(text, emotes) {
+    const chars = Array.from(text);
+    const ranges = [];
+    if (emotes) emotes.split('/').forEach((e) => {
+      const [id, pos] = e.split(':');
+      if (pos) pos.split(',').forEach((p) => { const [a, b] = p.split('-').map(Number); ranges.push({ a, b, id }); });
+    });
+    ranges.sort((x, y) => x.a - y.a);
+    let out = '', i = 0;
+    ranges.forEach((r) => {
+      out += esc(chars.slice(i, r.a).join(''));
+      const name = chars.slice(r.a, r.b + 1).join('');
+      out += '<img class="emote" alt="' + esc(name) + '" title="' + esc(name) + '" src="https://static-cdn.jtvnw.net/emoticons/v2/' + encodeURIComponent(r.id) + '/default/dark/1.0">';
+      i = r.b + 1;
+    });
+    return out + esc(chars.slice(i).join(''));
+  }
+
+  // ---------- selectie ----------
+  function select(ch, el) {
+    if (state.sel) state.sel.el.classList.remove('sel');
+    state.sel = { channel: ch, user: el.dataset.user, userId: el.dataset.userId, msgId: el.dataset.id, el };
+    el.classList.add('sel');
+    setActive(ch);
+    $('#selInfo').innerHTML = 'Geselecteerd: <b>' + esc(el.dataset.user) + '</b> in <b>' + esc(ch) + '</b>. Gebruik een sneltoets of knop. <kbd>Esc</kbd> om op te heffen.';
+  }
+  function clearSel() {
+    if (state.sel) state.sel.el.classList.remove('sel');
+    state.sel = null;
+    $('#selInfo').innerHTML = 'Klik op een chatbericht om iemand te selecteren. <kbd>Esc</kbd> heft de selectie op.';
+  }
+
+  // ---------- acties ----------
+  function sendChat(ch, text) {
+    if (ch === 'demo') { addMsg('demo', { user: 'jij', name: state.me ? state.me.login : 'jij', text, badges: 'moderator' }); return; }
+    if (!state.me) return toast('Log in (⚙) om berichten te versturen.', 'err');
+    irc.send('PRIVMSG #' + ch + ' :' + text.replace(/[\r\n]+/g, ' '));
+    addMsg(ch, { user: state.me.login, name: state.me.login, text, badges: 'moderator' });
+  }
+
+  async function runShortcut(sc) {
+    if (sc.type === 'msg') {
+      if (!state.active) return toast('Voeg eerst een chatzone toe in dit tabblad.', 'err');
+      const text = sc.text || '';
+      if (!text.includes('{user}')) return sendChat(state.active, text);
+      if (!state.sel) return toast('Selecteer eerst iemand voor ' + sc.name + '.', 'err');
+      return sendChat(state.sel.channel, text.split('{user}').join(state.sel.user));
+    }
+    const s = state.sel;
+    if (!s) return toast('Selecteer eerst een bericht voor ' + sc.name + '.', 'err');
+    const what = { timeout: 'timeout ' + fmtDur(+sc.dur), ban: 'ban', unban: 'unban', delete: 'bericht verwijderd' }[sc.type];
+    if (s.channel === 'demo') {
+      if (sc.type === 'delete') markDeleted('demo', (el) => el === s.el);
+      if (sc.type === 'timeout' || sc.type === 'ban') markDeleted('demo', (el) => el.dataset.user === s.user);
+      addSys('demo', '(demo) ' + s.user + ': ' + what);
+      clearSel();
+      return;
+    }
+    try {
+      const bid = await channelId(s.channel);
+      const mid = state.me.user_id;
+      if (sc.type === 'timeout' || sc.type === 'ban') {
+        const data = { user_id: s.userId, reason: sc.reason || '' };
+        if (sc.type === 'timeout') data.duration = +sc.dur;
+        await helix('POST', 'moderation/bans', { broadcaster_id: bid, moderator_id: mid }, { data });
+      } else if (sc.type === 'unban') {
+        await helix('DELETE', 'moderation/bans', { broadcaster_id: bid, moderator_id: mid, user_id: s.userId });
+      } else if (sc.type === 'delete') {
+        if (!s.msgId) throw new Error('dit bericht kan niet worden verwijderd');
+        await helix('DELETE', 'moderation/chat', { broadcaster_id: bid, moderator_id: mid, message_id: s.msgId });
+      }
+      toast(s.user + ': ' + what, 'ok');
+      clearSel();
+    } catch (e) {
+      toast(sc.name + ' mislukt: ' + e.message, 'err');
+    }
+  }
+
+  // ---------- sneltoetsen ----------
+  function comboFromEvent(e) {
+    if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return null;
+    let k = e.key.length === 1 ? e.key.toUpperCase() : e.key;
+    if (e.code && /^(Digit|Numpad)\d$/.test(e.code)) k = (e.code.startsWith('Numpad') ? 'Num' : '') + e.code.slice(-1);
+    if (k === ' ') k = 'Space';
+    return [e.ctrlKey && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Meta', k].filter(Boolean).join('+');
+  }
+
+  function renderShortcuts() {
+    if (zoneEls.buttons) renderPad(zoneEls.buttons);
+    const bar = $('#shortcutBar');
+    bar.innerHTML = '';
+    state.shortcuts.forEach((sc) => {
+      const b = document.createElement('button');
+      b.className = 'sc' + (USER_TYPES.includes(sc.type) ? ' user-action' : '');
+      b.title = TYPE_LABEL[sc.type] + (sc.type === 'msg' ? ': ' + sc.text : '') + ' (rechtsklik om te bewerken)';
+      b.innerHTML = esc(sc.name) + (sc.key ? ' <kbd>' + esc(sc.key) + '</kbd>' : '');
+      b.onclick = () => runShortcut(sc);
+      b.oncontextmenu = (e) => { e.preventDefault(); openScModal(sc); };
+      bar.appendChild(b);
+    });
+    const list = $('#scList');
+    list.innerHTML = state.shortcuts.length ? '' : '<li class="hint">Nog geen sneltoetsen. Voeg ze toe met + Sneltoets.</li>';
+    state.shortcuts.forEach((sc) => {
+      const li = document.createElement('li');
+      li.innerHTML = '<span>' + esc(sc.name) + ' <small style="color:var(--muted)">' + TYPE_LABEL[sc.type] + '</small></span>' + (sc.key ? '<kbd>' + esc(sc.key) + '</kbd>' : '');
+      const ed = document.createElement('button');
+      ed.className = 'icon'; ed.textContent = '✎'; ed.onclick = () => { closeModal('setModal'); openScModal(sc); };
+      li.appendChild(ed);
+      list.appendChild(li);
+    });
+  }
+
+  let editing = null, pendingKey = '', listening = false;
+  function openScModal(sc) {
+    editing = sc || null;
+    $('#scTitle').textContent = sc ? 'Sneltoets bewerken' : 'Sneltoets toevoegen';
+    $('#scName').value = sc ? sc.name : '';
+    $('#scType').value = sc ? sc.type : 'msg';
+    $('#scText').value = sc ? sc.text || '' : '';
+    $('#scDur').value = sc ? sc.dur || '600' : '600';
+    $('#scReason').value = sc ? sc.reason || '' : '';
+    pendingKey = sc ? sc.key || '' : '';
+    listening = false;
+    $('#scDelete').style.display = sc ? '' : 'none';
+    updateScFields(); updateKeyBtn();
+    openModal('scModal');
+    $('#scName').focus();
+  }
+  function updateScFields() {
+    const t = $('#scType').value;
+    $('#scMsgFields').hidden = t !== 'msg';
+    $('#scDurFields').hidden = t !== 'timeout';
+    $('#scReasonFields').hidden = !(t === 'timeout' || t === 'ban');
+  }
+  function updateKeyBtn() {
+    const b = $('#scKey');
+    b.classList.toggle('listening', listening);
+    b.textContent = listening ? 'Druk nu op een toets…' : (pendingKey || 'Klik en druk op een toets');
+  }
+  function saveSc() {
+    const t = $('#scType').value;
+    const name = $('#scName').value.trim() || (t === 'msg' ? $('#scText').value.trim().slice(0, 20) : TYPE_LABEL[t]);
+    if (t === 'msg' && !$('#scText').value.trim()) return toast('Vul een bericht in.', 'err');
+    if (!name) return toast('Geef de sneltoets een naam.', 'err');
+    const clash = pendingKey && state.shortcuts.find((s) => s.key === pendingKey && s !== editing);
+    if (clash) return toast(pendingKey + ' is al in gebruik door ' + clash.name + '.', 'err');
+    const sc = editing || { id: Date.now().toString(36) };
+    Object.assign(sc, { name, type: t, text: $('#scText').value.trim(), dur: $('#scDur').value, reason: $('#scReason').value.trim(), key: pendingKey });
+    if (!editing) state.shortcuts.push(sc);
+    saveShortcuts(); renderShortcuts(); closeModal('scModal');
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (listening) {
+      e.preventDefault(); e.stopPropagation();
+      if (e.key === 'Escape') { listening = false; updateKeyBtn(); return; }
+      if (e.key === 'Backspace' || e.key === 'Delete') { pendingKey = ''; listening = false; updateKeyBtn(); return; }
+      const c = comboFromEvent(e);
+      if (c) { pendingKey = c; listening = false; updateKeyBtn(); }
+      return;
+    }
+    if (document.querySelector('.modal-bg.open')) {
+      if (e.key === 'Escape') document.querySelectorAll('.modal-bg.open').forEach((m) => m.classList.remove('open'));
+      return;
+    }
+    if (e.key === 'Escape') { clearSel(); return; }
+    const c = comboFromEvent(e);
+    if (!c) return;
+    // tijdens typen alleen combinaties met Ctrl/Alt of F-toetsen
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+    if (typing && !(e.ctrlKey || e.altKey || /^F\d+$/.test(e.key))) return;
+    const sc = state.shortcuts.find((s) => s.key === c);
+    if (sc) { e.preventDefault(); runShortcut(sc); }
+  }, true);
+
+  // ---------- demo ----------
+  const DEMO_USERS = ['kaaskop99', 'PixelPiet', 'GamerGirl_NL', 'spammer_bot', 'Henk_de_Tank', 'luna_moon', 'xXSniperXx', 'Bram'];
+  const DEMO_TEXT = ['hoi chat!', 'wat een play 😂', 'GG', 'kun je die boss nog een keer doen?', 'KOOP GOEDKOPE FOLLOWERS bit.ly/nep',
+    'eerste keer hier, leuke stream', 'LUL', 'welke muis gebruik je?', 'hahahaha', 'LET OP DIT IS SPAM SPAM SPAM', 'goedemorgen allemaal', 'Kappa'];
+  function startDemo(zone) {
+    setTimeout(() => addSys('demo', 'Demochat: berichten zijn nep en acties gebeuren alleen hier.'));
+    let n = 0;
+    zone.demoT = setInterval(() => {
+      const u = DEMO_USERS[Math.floor(Math.random() * DEMO_USERS.length)];
+      const text = DEMO_TEXT[Math.floor(Math.random() * DEMO_TEXT.length)];
+      const emotes = text === 'Kappa' ? '25:0-4' : '';
+      addMsg('demo', { id: 'demo' + n++, userId: u, user: u.toLowerCase(), name: u, text, emotes, badges: u === 'Bram' ? 'vip/1' : (n % 3 ? '' : 'subscriber/1') });
+    }, 1400);
+  }
+
+  // ---------- hulpjes ----------
+  function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  function fmtDur(s) { return s >= 86400 ? Math.round(s / 86400) + ' d' : s >= 3600 ? Math.round(s / 3600) + ' u' : s >= 60 ? Math.round(s / 60) + ' min' : s + ' s'; }
+  function nameColor(n) { let h = 0; for (const c of n) h = (h * 31 + c.charCodeAt(0)) % 360; return 'hsl(' + h + ',70%,65%)'; }
+  function openModal(id) { document.getElementById(id).classList.add('open'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+  // ---------- knoppen ----------
+  document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => b.closest('.modal-bg').classList.remove('open')));
+  document.querySelectorAll('.modal-bg').forEach((m) => m.addEventListener('mousedown', (e) => { if (e.target === m) m.classList.remove('open'); }));
+  $('#zoneKind').onchange = () => { $('#zoneNameWrap').hidden = $('#zoneKind').value === 'buttons'; };
+  $('#addZoneBtn').onclick = () => { $('#zoneName').value = ''; $('#zoneKind').onchange(); openModal('zoneModal'); $('#zoneName').focus(); };
+  $('#zoneSave').onclick = () => { addZone($('#zoneName').value, $('#zoneKind').value); closeModal('zoneModal'); };
+  $('#zoneName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#zoneSave').click(); });
+  $('#addScBtn').onclick = () => openScModal(null);
+  $('#scType').onchange = updateScFields;
+  $('#scKey').onclick = () => { listening = !listening; updateKeyBtn(); };
+  $('#scSave').onclick = saveSc;
+  $('#scDelete').onclick = () => {
+    state.shortcuts = state.shortcuts.filter((s) => s !== editing);
+    saveShortcuts(); renderShortcuts(); closeModal('scModal');
+  };
+  $('#settingsBtn').onclick = () => { $('#clientId').value = state.clientId; $('#tokenPaste').value = ''; renderShortcuts(); renderAccount(); openModal('setModal'); };
+  $('#loginBtn').onclick = login;
+  $('#logoutBtn').onclick = logout;
+  $('#tokenSave').onclick = async () => {
+    const t = $('#tokenPaste').value.trim().replace(/^oauth:/, '');
+    if (!t) return;
+    state.token = t; store.set('token', t);
+    await validate();
+    if (state.me) { irc.reconnect(); toast('Ingelogd als ' + state.me.login, 'ok'); }
+  };
+  $('#exportBtn').onclick = () => {
+    const blob = new Blob([JSON.stringify({ tabs: state.tabs, shortcuts: state.shortcuts, clientId: state.clientId }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'modweergave-instellingen.json'; a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  $('#importBtn').onclick = () => $('#importFile').click();
+  $('#importFile').onchange = async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    try {
+      const j = JSON.parse(await f.text());
+      if (Array.isArray(j.shortcuts)) { state.shortcuts = j.shortcuts; saveShortcuts(); }
+      const tabs = Array.isArray(j.tabs) ? j.tabs : Array.isArray(j.zones) ? [{ id: 't1', name: 'Hoofd', zones: j.zones }] : null;
+      if (tabs && tabs.length) {
+        Object.keys(zoneEls).forEach((c) => { clearInterval(zoneEls[c].demoT); delete zoneEls[c]; });
+        state.tabs = tabs; state.tab = tabs[0].id; saveTabs(); store.set('tab', state.tab);
+      }
+      if (j.clientId) { state.clientId = j.clientId; store.set('clientId', j.clientId); $('#clientId').value = j.clientId; }
+      renderShortcuts(); renderTabs(); renderZones(); irc.reconnect();
+      toast('Instellingen geïmporteerd.', 'ok');
+    } catch { toast('Dit bestand kon niet worden gelezen.', 'err'); }
+    e.target.value = '';
+  };
+
+  // ---------- start ----------
+  $('#redirectUrl').textContent = redirectUri;
+  readTokenFromHash();
+  renderShortcuts();
+  renderTabs();
+  renderZones();
+  validate().then(() => irc.connect());
+})();
+</script>
+</body>
+</html>
