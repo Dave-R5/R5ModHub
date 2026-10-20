@@ -46,7 +46,7 @@
   #selInfo:empty { display: none; }
   #selInfo b { color: var(--text); }
 
-  #zones { flex: 1; display: block; padding: 8px; overflow: auto; }
+  #zones { flex: 1; display: block; padding: 8px; overflow: auto; position: relative; z-index: 0; }
   .canvas { display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; align-items: flex-start; position: relative; }
   #zones.free .canvas { display: block; }
   #zones.free .canvas > .zone { position: absolute; }
@@ -128,7 +128,10 @@
   .tab .tclose { padding: 4px 6px; font-size: 12px; }
   .tadd { white-space: nowrap; min-height: 44px; padding: 0 14px; }
   .zone.stream { width: 640px; height: 400px; background: #000; }
-  .zone.stream .player { flex: 1; border: 0; width: 100%; }
+  .zone.stream .player-slot { flex: 1; margin-bottom: 14px; }
+  #players { position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 5; }
+  #players .pl { position: fixed; display: flex; background: #000; }
+  #players .pl iframe { flex: 1; border: 0; width: 100%; height: 100%; }
   .zone.buttons { align-self: flex-start; width: auto; height: auto; min-width: 0; min-height: 0; max-width: 100%; }
   .zone.buttons .dot, .zone.buttons [data-act=open], .zone.buttons [data-act=close] { display: none; }
   .pad { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; overflow: auto; align-content: flex-start; }
@@ -499,6 +502,7 @@
 <div id="bellDd" hidden></div>
 <div id="picker" hidden></div>
 <div id="toasts"></div>
+<div id="players"></div>
 
 <script>
 (() => {
@@ -1390,12 +1394,20 @@
     zone.dot.classList.add('live');
     const host = location.hostname;
     if (host && z.channel !== 'demo') {
+      // De speler staat los in een eigen laag en volgt alleen de plek van het blok. Een iframe dat
+      // in de pagina verplaatst wordt, laadt opnieuw; zo blijft de stream (en het geluid) doorlopen
+      // als je van tabblad wisselt of blokken verschuift.
       const f = document.createElement('iframe');
-      f.className = 'player';
       f.allowFullscreen = true;
       f.allow = 'autoplay; fullscreen';
       f.src = 'https://player.twitch.tv/?' + new URLSearchParams({ channel: z.channel, parent: host, muted: 'true' });
-      zone.root.appendChild(f);
+      zone.slot = document.createElement('div');
+      zone.slot.className = 'player-slot';
+      zone.root.appendChild(zone.slot);
+      zone.player = document.createElement('div');
+      zone.player.className = 'pl';
+      zone.player.appendChild(f);
+      $('#players').appendChild(zone.player);
     } else {
       zone.root.insertAdjacentHTML('beforeend', '<div class="player-off">' + (z.channel === 'demo'
         ? 'Hier komt de stream van het kanaal.'
@@ -1405,6 +1417,28 @@
     }
     return zone;
   }
+
+  // spelers elke frame op de plek van hun blok zetten; niet zichtbaar = buiten beeld, maar blijft spelen
+  function syncPlayers() {
+    Object.values(zoneEls).forEach((z) => {
+      if (!z.player) return;
+      const s = z.slot, p = z.player;
+      let k = 'off';
+      if (s.isConnected && s.offsetParent !== null && !(document.getElementById('zones').hidden && s.closest('#zones'))) {
+        const r = s.getBoundingClientRect();
+        const a = (s.closest('#zones') || s.closest('#mview') || document.body).getBoundingClientRect();
+        k = r.left + ',' + r.top + ',' + r.width + ',' + r.height + ',' + Math.max(0, a.top - r.top) + ',' + Math.max(0, r.right - a.right) + ',' +
+          Math.max(0, r.bottom - a.bottom) + ',' + Math.max(0, a.left - r.left);
+      }
+      if (p.dataset.k === k) return;
+      p.dataset.k = k;
+      if (k === 'off') { Object.assign(p.style, { left: '-10000px', top: '0px', clipPath: '' }); return; }
+      const [l, t, w, h, ct, cr, cb, cl] = k.split(',');
+      Object.assign(p.style, { left: l + 'px', top: t + 'px', width: w + 'px', height: h + 'px', clipPath: 'inset(' + ct + 'px ' + cr + 'px ' + cb + 'px ' + cl + 'px)' });
+    });
+    requestAnimationFrame(syncPlayers);
+  }
+  requestAnimationFrame(syncPlayers);
 
   function buildPad(z) {
     const zone = makeShell(z, 'Sneltoetsen', '');
@@ -1607,7 +1641,7 @@
     detachZone(tab.zones, z);
     const k = keyOf(z);
     const stillUsed = state.tabs.some((t) => t.zones.some((x) => keyOf(x) === k));
-    if (!stillUsed && zoneEls[k]) { clearInterval(zoneEls[k].demoT); clearInterval(zoneEls[k].timer); delete zoneEls[k]; }
+    if (!stillUsed && zoneEls[k]) { clearInterval(zoneEls[k].demoT); clearInterval(zoneEls[k].timer); if (zoneEls[k].player) zoneEls[k].player.remove(); delete zoneEls[k]; }
     if (!z.kind || z.kind === 'chat') {
       if (state.sel && state.sel.channel === z.channel) clearSel();
       if (state.active === z.channel) state.active = null;
@@ -2763,7 +2797,7 @@
     if (Array.isArray(j.shortcuts)) { state.shortcuts = j.shortcuts; saveShortcuts(); }
     const tabs = Array.isArray(j.tabs) ? j.tabs : Array.isArray(j.zones) ? [{ id: 't1', name: 'Hoofd', zones: j.zones }] : null;
     if (tabs && tabs.length) {
-      Object.keys(zoneEls).forEach((c) => { clearInterval(zoneEls[c].demoT); clearInterval(zoneEls[c].timer); delete zoneEls[c]; });
+      Object.keys(zoneEls).forEach((c) => { clearInterval(zoneEls[c].demoT); clearInterval(zoneEls[c].timer); if (zoneEls[c].player) zoneEls[c].player.remove(); delete zoneEls[c]; });
       state.tabs = tabs; state.tab = tabs[0].id; saveTabs(); store.set('tab', state.tab);
     }
     if (j.clientId) { state.clientId = j.clientId; store.set('clientId', j.clientId); $('#clientId').value = j.clientId; }
