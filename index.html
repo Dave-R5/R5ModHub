@@ -94,6 +94,14 @@
   .sq.user-action { border-color: #5a3d99; }
   .sq kbd { font-size: 9px; padding: 0 3px; }
   .sq.add { border-style: dashed; color: var(--muted); font-size: 22px; }
+  .zone.users { width: 240px; }
+  .zone.users .dot { display: none; }
+  .ul-top { display: flex; gap: 6px; align-items: center; padding: 6px; border-bottom: 1px solid var(--line); }
+  .ul-count { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .ul-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+  .ul-title { font-size: 11px; color: var(--muted); text-transform: uppercase; padding: 8px 10px 2px; }
+  .ul-u { display: block; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 0; padding: 3px 10px; }
+  .ul-u:hover { background: #26262c; }
   .player-off { margin: auto; padding: 16px; text-align: center; color: var(--muted); max-width: 320px; }
   #emptyHint { margin: auto; text-align: center; color: var(--muted); max-width: 420px; }
 
@@ -161,6 +169,8 @@
       <option value="chat">Chat (lezen en modereren)</option>
       <option value="stream">Streamweergave (video)</option>
       <option value="both">Stream én chat (video met chat ernaast)</option>
+      <option value="all">Stream, chat én deelnemers</option>
+      <option value="users">Alleen deelnemerslijst</option>
     </select>
     <div id="zoneNameWrap">
     <label for="zoneName">Kanaalnaam (zoals in twitch.tv/<b>naam</b>)</label>
@@ -258,7 +268,7 @@
 <script>
 (() => {
   'use strict';
-  const SCOPES = ['chat:read', 'chat:edit', 'moderator:manage:banned_users', 'moderator:manage:chat_messages', 'user:read:emotes'];
+  const SCOPES = ['chat:read', 'chat:edit', 'moderator:manage:banned_users', 'moderator:manage:chat_messages', 'user:read:emotes', 'moderator:read:chatters'];
   const MAX_MSGS = 300;
   const TYPE_LABEL = { msg: 'Chatbericht', timeout: 'Timeout', ban: 'Ban', unban: 'Unban', delete: 'Verwijderen' };
   const USER_TYPES = ['timeout', 'ban', 'unban', 'delete'];
@@ -509,7 +519,7 @@
   // Een chatzone per kanaal; staat hetzelfde kanaal in meerdere tabbladen,
   // dan verhuist dezelfde zone mee naar het tabblad dat open is.
   const zoneEls = {};
-  const keyOf = (z) => z.kind === 'buttons' ? 'buttons' : (z.kind === 'stream' ? 'stream:' : '') + z.channel;
+  const keyOf = (z) => z.kind === 'buttons' ? 'buttons' : (z.kind === 'stream' || z.kind === 'users' ? z.kind + ':' : '') + z.channel;
 
   function renderZones() {
     const wrap = $('#zones');
@@ -527,7 +537,7 @@
     }
     zones.forEach((z) => {
       const k = keyOf(z);
-      if (!zoneEls[k]) zoneEls[k] = z.kind === 'stream' ? buildStream(z) : z.kind === 'buttons' ? buildPad(z) : buildZone(z);
+      if (!zoneEls[k]) zoneEls[k] = z.kind === 'stream' ? buildStream(z) : z.kind === 'buttons' ? buildPad(z) : z.kind === 'users' ? buildUsers(z) : buildZone(z);
       const el = zoneEls[k].root;
       el.style.width = z.w ? z.w + 'px' : '';
       el.style.height = z.h ? z.h + 'px' : '';
@@ -612,6 +622,87 @@
     return zone;
   }
 
+  // ---------- deelnemerslijst ----------
+  function buildUsers(z) {
+    const zone = makeShell(z, '👥 ' + z.channel, '<button class="icon" data-act="refresh" title="Vernieuwen">⟳</button>');
+    zone.root.insertAdjacentHTML('beforeend',
+      '<div class="ul-top"><input placeholder="Zoek deelnemer…" autocomplete="off"><span class="ul-count"></span></div><div class="ul-list"></div>');
+    zone.list = zone.root.querySelector('.ul-list');
+    zone.count = zone.root.querySelector('.ul-count');
+    zone.search = zone.root.querySelector('.ul-top input');
+    zone.users = [];
+    zone.search.oninput = () => drawUsers(zone);
+    zone.root.querySelector('[data-act=refresh]').onclick = () => loadUsers(zone);
+    zone.list.addEventListener('click', (e) => {
+      const b = e.target.closest('.ul-u');
+      if (!b) return;
+      // nep-bericht zodat het gebruikerskaartje en de sneltoetsen werken
+      const el = document.createElement('div');
+      el.dataset.user = b.dataset.login; el.dataset.userId = b.dataset.id; el.dataset.id = '';
+      el.innerHTML = '<span class="user">' + esc(b.textContent) + '</span>';
+      state.sel && state.sel.el.classList.remove('sel');
+      state.sel = { channel: z.channel, user: b.dataset.login, userId: b.dataset.id, msgId: '', el };
+      $('#selInfo').innerHTML = 'Geselecteerd: <b>' + esc(b.dataset.login) + '</b> in <b>' + esc(z.channel) + '</b>.';
+      openCard(z.channel, el, e.clientX, e.clientY);
+    });
+    loadUsers(zone);
+    zone.timer = setInterval(() => { if (zone.root.isConnected) loadUsers(zone); }, 60000);
+    return zone;
+  }
+
+  async function loadUsers(zone) {
+    const ch = zone.channel;
+    if (ch === 'demo') {
+      zone.users = DEMO_USERS.map((n) => ({ user_login: n.toLowerCase(), user_name: n, user_id: n }));
+      return drawUsers(zone);
+    }
+    if (!state.me) { zone.list.innerHTML = '<p class="hint" style="padding:8px">Log in om de deelnemers te zien.</p>'; zone.count.textContent = ''; return; }
+    try {
+      const bid = await channelId(ch);
+      const all = [];
+      let cursor = '', total = 0;
+      for (let i = 0; i < 10; i++) {
+        const params = { broadcaster_id: bid, moderator_id: state.me.user_id, first: 1000 };
+        if (cursor) params.after = cursor;
+        const j = await helix('GET', 'chat/chatters', params);
+        all.push(...j.data); total = j.total;
+        cursor = j.pagination && j.pagination.cursor;
+        if (!cursor) break;
+      }
+      zone.users = all; zone.total = total;
+      drawUsers(zone);
+    } catch (e) {
+      zone.list.innerHTML = '<p class="hint" style="padding:8px">Deelnemers laden mislukt: ' + esc(e.message) +
+        '. Je moet mod zijn in dit kanaal en opnieuw inloggen na deze update.</p>';
+    }
+  }
+
+  function drawUsers(zone) {
+    const q = zone.search.value.trim().toLowerCase();
+    const seenBadges = {};
+    // rollen afleiden uit de chat (de lijst van Twitch geeft die niet mee)
+    const chat = zoneEls[zone.channel];
+    if (chat && chat.msgs) chat.msgs.querySelectorAll('.msg[data-user]').forEach((m) => {
+      const b = m.querySelector('.badge.b') ? 0 : m.querySelector('.badge.m') ? 1 : m.querySelector('.badge.v') ? 2 : null;
+      if (b !== null) seenBadges[m.dataset.user] = b;
+    });
+    const groups = [['Streamer', []], ['Moderators', []], ['VIPs', []], ['Kijkers', []]];
+    zone.users.filter((u) => !q || u.user_login.includes(q)).sort((a, b) => a.user_login.localeCompare(b.user_login))
+      .forEach((u) => groups[seenBadges[u.user_login] ?? (u.user_login === zone.channel ? 0 : 3)][1].push(u));
+    zone.list.innerHTML = '';
+    groups.forEach(([title, list]) => {
+      if (!list.length) return;
+      zone.list.insertAdjacentHTML('beforeend', '<div class="ul-title">' + title + ' (' + list.length + ')</div>');
+      list.slice(0, 500).forEach((u) => {
+        const b = document.createElement('button');
+        b.className = 'ul-u'; b.dataset.login = u.user_login; b.dataset.id = u.user_id;
+        b.textContent = u.user_name || u.user_login;
+        zone.list.appendChild(b);
+      });
+    });
+    zone.count.textContent = (zone.total || zone.users.length) + ' in chat';
+  }
+
   function buildStream(z) {
     const zone = makeShell(z, '▶ ' + z.channel, '');
     zone.dot.classList.add('live');
@@ -662,6 +753,7 @@
 
   function addZone(name, kind) {
     if (kind === 'both') { addZone(name, 'stream'); return addZone(name, 'chat'); }
+    if (kind === 'all') { addZone(name, 'stream'); addZone(name, 'chat'); return addZone(name, 'users'); }
     if (kind === 'buttons') name = 'knoppen';
     const ch = name.trim().toLowerCase().replace(/^.*twitch\.tv\//, '').replace(/[^a-z0-9_]/g, '');
     if (!ch) return toast('Ongeldige kanaalnaam.', 'err');
@@ -678,7 +770,7 @@
     tab.zones = tab.zones.filter((x) => x !== z);
     const k = keyOf(z);
     const stillUsed = state.tabs.some((t) => t.zones.some((x) => keyOf(x) === k));
-    if (!stillUsed && zoneEls[k]) { clearInterval(zoneEls[k].demoT); delete zoneEls[k]; }
+    if (!stillUsed && zoneEls[k]) { clearInterval(zoneEls[k].demoT); clearInterval(zoneEls[k].timer); delete zoneEls[k]; }
     if (!z.kind || z.kind === 'chat') {
       if (state.sel && state.sel.channel === z.channel) clearSel();
       if (state.active === z.channel) state.active = null;
@@ -1161,7 +1253,7 @@
 
     // laatste berichten van deze gebruiker in deze chat
     const hist = card.querySelector('.card-hist');
-    const msgs = [...zoneEls[ch].msgs.querySelectorAll('.msg')].filter((m) => m.dataset.user === user).slice(-8);
+    const msgs = !(zoneEls[ch] && zoneEls[ch].msgs) ? [] : [...zoneEls[ch].msgs.querySelectorAll('.msg')].filter((m) => m.dataset.user === user).slice(-8);
     msgs.forEach((m) => {
       const d = document.createElement('div');
       d.className = 'hmsg' + (m.classList.contains('deleted') ? ' deleted' : '');
