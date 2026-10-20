@@ -358,7 +358,7 @@
 <script>
 (() => {
   'use strict';
-  const SCOPES = ['chat:read', 'chat:edit', 'moderator:manage:banned_users', 'moderator:manage:chat_messages', 'user:read:emotes', 'moderator:read:chatters', 'user:read:moderated_channels'];
+  const SCOPES = ['chat:read', 'chat:edit', 'moderator:manage:banned_users', 'moderator:manage:chat_messages', 'user:read:emotes', 'moderator:read:chatters', 'user:read:moderated_channels', 'moderation:read', 'channel:read:vips'];
   const MAX_MSGS = 300;
   // Client ID van de gedeelde Twitch-app van deze site: hiermee kan iedereen direct inloggen.
   // Een Client ID is openbaar (geen wachtwoord), dus hij mag in de code staan.
@@ -892,6 +892,7 @@
     const ch = zone.channel;
     if (ch === 'demo') {
       zone.users = DEMO_USERS.map((n) => ({ user_login: n.toLowerCase(), user_name: n, user_id: n }));
+      zone.roles = { kaaskop99: 1, henk_de_tank: 1, bram: 2 };
       return drawUsers(zone);
     }
     if (!state.me) { zone.list.innerHTML = '<p class="hint" style="padding:8px">Log in om de deelnemers te zien.</p>'; zone.count.textContent = ''; return; }
@@ -908,6 +909,7 @@
         if (!cursor) break;
       }
       zone.users = all; zone.total = total;
+      await loadRoles(zone, bid);
       try {
         const st = await helix('GET', 'streams', { user_login: ch });
         zone.viewers = st.data.length ? st.data[0].viewer_count : null;
@@ -917,6 +919,30 @@
       zone.list.innerHTML = '<p class="hint" style="padding:8px">Deelnemers laden mislukt: ' + esc(e.message) +
         '. Je moet mod zijn in dit kanaal en opnieuw inloggen na deze update.</p>';
     }
+  }
+
+  // mods en VIP's van het kanaal (lukt alleen als Twitch het jou als mod toestaat;
+  // anders vallen we terug op de badges die we in de chat zien)
+  const roleCache = {};
+  async function loadRoles(zone, bid) {
+    const c = roleCache[zone.channel];
+    if (c && Date.now() - c.at < 5 * 60 * 1000) { zone.roles = c.roles; return; }
+    const roles = {};
+    const grab = async (path, role) => {
+      let cursor = '';
+      for (let i = 0; i < 20; i++) {
+        const params = { broadcaster_id: bid, first: 100 };
+        if (cursor) params.after = cursor;
+        const j = await helix('GET', path, params);
+        j.data.forEach((u) => { if (!roles[u.user_login]) roles[u.user_login] = role; });
+        cursor = j.pagination && j.pagination.cursor;
+        if (!cursor) break;
+      }
+    };
+    try { await grab('moderation/moderators', 1); } catch {}
+    try { await grab('channels/vips', 2); } catch {}
+    roleCache[zone.channel] = { at: Date.now(), roles };
+    zone.roles = roles;
   }
 
   function drawUsers(zone) {
@@ -930,7 +956,7 @@
     });
     const groups = [['Streamer', []], ['Moderators', []], ['VIPs', []], ['Kijkers', []]];
     zone.users.filter((u) => !q || u.user_login.includes(q)).sort((a, b) => a.user_login.localeCompare(b.user_login))
-      .forEach((u) => groups[seenBadges[u.user_login] ?? (u.user_login === zone.channel ? 0 : 3)][1].push(u));
+      .forEach((u) => groups[u.user_login === zone.channel ? 0 : seenBadges[u.user_login] ?? (zone.roles || {})[u.user_login] ?? 3][1].push(u));
     zone.list.innerHTML = '';
     groups.forEach(([title, list]) => {
       if (!list.length) return;
@@ -1775,7 +1801,10 @@
   renderTabs();
   renderZones();
   load7tvGlobal();
-  validate().then(() => { irc.connect(); loadTwitchEmotes(); loadMy7tv(); loadMyChans(); });
+  validate().then(() => {
+    irc.connect(); loadTwitchEmotes(); loadMy7tv(); loadMyChans();
+    Object.values(zoneEls).forEach((z) => { if (z.kind === 'users') loadUsers(z); });
+  });
 })();
 </script>
 </body>
