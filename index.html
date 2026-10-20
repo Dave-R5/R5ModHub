@@ -113,6 +113,8 @@
   .mychan .mc-state { font-size: 11px; color: var(--muted); }
   .mychan.live { border-color: var(--danger); }
   .mychan.live .mc-state { color: #ff6b6b; }
+  body.resizing iframe { pointer-events: none; }
+  body.resizing { user-select: none; }
   .player-off { margin: auto; padding: 16px; text-align: center; color: var(--muted); max-width: 320px; }
   #emptyHint { margin: auto; text-align: center; color: var(--muted); max-width: 420px; }
 
@@ -592,6 +594,15 @@
       const [moved] = zones.splice(fi, 1);
       zones.splice(zones.indexOf(zone.tabZone), 0, moved);
       saveTabs(); renderZones();
+    });
+    // tijdens het vergroten/verkleinen de video "doorzichtig" maken voor de muis,
+    // anders pakt de video de muis af zodra je eroverheen sleept en hapert het
+    root.addEventListener('pointerdown', (e) => {
+      const r = root.getBoundingClientRect();
+      if (e.clientX < r.right - 24 || e.clientY < r.bottom - 24) return;
+      document.body.classList.add('resizing');
+      const done = () => { document.body.classList.remove('resizing'); removeEventListener('pointerup', done, true); removeEventListener('mouseup', done, true); };
+      addEventListener('pointerup', done, true); addEventListener('mouseup', done, true);
     });
     new ResizeObserver(() => {
       const zz = zone.tabZone;
