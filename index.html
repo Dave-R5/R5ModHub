@@ -98,6 +98,26 @@
   .sc-list li { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--line); }
   .sc-list li span { flex: 1; }
 
+  .msg .user { cursor: pointer; }
+  .msg .user:hover { text-decoration: underline; }
+  #card { position: fixed; z-index: 15; width: 320px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.5); padding: 10px; }
+  .card-head { display: flex; align-items: center; gap: 10px; }
+  .card-head .avatar { width: 44px; height: 44px; border-radius: 50%; }
+  .card-head .who { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .card-head .who b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; }
+  .card-head .who small, .card-info, .card-label { color: var(--muted); font-size: 12px; }
+  .card-info { margin-top: 6px; }
+  .card-label { margin: 10px 0 4px; }
+  .card-acts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+  .cbtn { min-height: 40px; padding: 4px; font-size: 13px; touch-action: manipulation; }
+  .cbtn.mod { border-color: #5a3d99; }
+  .cbtn.danger { border-color: var(--danger); }
+  .card-hist { font-size: 13px; background: var(--bg); border-radius: 6px; padding: 4px 6px; max-height: 160px; overflow-y: auto; }
+  .card-hist:empty::before { content: 'Geen berichten in beeld.'; color: var(--muted); }
+  .hmsg { padding: 2px 0; word-wrap: break-word; }
+  .hmsg.deleted { text-decoration: line-through; color: var(--muted); }
+  .hmsg .time { color: var(--muted); font-size: 11px; }
   #toasts { position: fixed; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; z-index: 20; }
   .toast { background: var(--panel2); border: 1px solid var(--line); border-left: 4px solid var(--accent); padding: 8px 12px; border-radius: 6px; max-width: 360px; font-size: 13px; }
   .toast.err { border-left-color: var(--danger); }
@@ -216,6 +236,7 @@
   </div>
 </div>
 
+<div id="card" hidden></div>
 <div id="toasts"></div>
 
 <script>
@@ -558,7 +579,9 @@
     paused.onclick = () => { msgs.scrollTop = msgs.scrollHeight; };
     msgs.addEventListener('click', (e) => {
       const el = e.target.closest('.msg');
-      if (el && el.dataset.user) select(z.channel, el);
+      if (!el || !el.dataset.user) return;
+      select(z.channel, el);
+      if (e.target.closest('.user')) openCard(z.channel, el, e.clientX, e.clientY);
     });
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && input.value.trim()) { sendChat(z.channel, input.value.trim()); input.value = ''; }
@@ -785,6 +808,91 @@
     }
   }
 
+  // ---------- gebruikerskaartje (klik op een naam) ----------
+  const CARD_ACTIONS = [
+    { name: 'Bericht weg', type: 'delete' },
+    { name: 'Purge 1s', type: 'timeout', dur: 1 },
+    { name: '10 min', type: 'timeout', dur: 600 },
+    { name: '1 uur', type: 'timeout', dur: 3600 },
+    { name: '1 dag', type: 'timeout', dur: 86400 },
+    { name: 'Ban', type: 'ban' },
+    { name: 'Unban', type: 'unban' },
+  ];
+  let cardFor = null;
+
+  function openCard(ch, el, x, y) {
+    const card = $('#card');
+    const user = el.dataset.user;
+    const nameEl = el.querySelector('.user');
+    cardFor = user;
+    card.innerHTML =
+      '<div class="card-head"><img class="avatar" alt="" hidden><div class="who"><b></b><small></small></div>' +
+      '<button class="icon" data-x title="Sluiten">✕</button></div>' +
+      '<div class="card-info"></div><div class="card-acts"></div><div class="card-own"></div>' +
+      '<div class="card-label">Laatste berichten in ' + esc(ch) + '</div><div class="card-hist"></div>';
+    card.querySelector('.who b').textContent = nameEl ? nameEl.textContent : user;
+    card.querySelector('.who b').style.color = nameEl ? nameEl.style.color : '';
+    card.querySelector('.who small').textContent = el.querySelector('.badge') ? [...el.querySelectorAll('.badge')].map((b) => ({ B: 'streamer', M: 'moderator', V: 'VIP', S: 'abonnee' }[b.textContent])).join(', ') : '';
+    card.querySelector('[data-x]').onclick = closeCard;
+
+    const acts = card.querySelector('.card-acts');
+    const addBtn = (wrap, label, cls, fn) => {
+      const b = document.createElement('button');
+      b.className = 'cbtn ' + cls; b.textContent = label;
+      b.onclick = () => { fn(); };
+      wrap.appendChild(b);
+    };
+    CARD_ACTIONS.forEach((a) => addBtn(acts, a.name, a.type === 'ban' ? 'danger' : 'mod', () => { closeCard(); runShortcut({ ...a, reason: '' }); }));
+    addBtn(acts, '@ Noemen', '', () => {
+      const z = zoneEls[ch];
+      closeCard();
+      if (z) { z.input.value = '@' + (nameEl ? nameEl.textContent : user) + ' ' + z.input.value; z.input.focus(); }
+    });
+    addBtn(acts, 'Profiel ↗', '', () => window.open('https://twitch.tv/' + user, '_blank'));
+    if (ch !== 'demo') addBtn(acts, 'Modlogs ↗', '', () => window.open('https://www.twitch.tv/popout/' + ch + '/viewercard/' + user, '_blank'));
+
+    // eigen sneltoetsen die iets met deze gebruiker doen
+    const own = card.querySelector('.card-own');
+    const mine = state.shortcuts.filter((sc) => USER_TYPES.includes(sc.type) || (sc.type === 'msg' && (sc.text || '').includes('{user}')));
+    if (mine.length) {
+      own.insertAdjacentHTML('beforeend', '<div class="card-label">Jouw sneltoetsen</div>');
+      const w = document.createElement('div'); w.className = 'card-acts'; own.appendChild(w);
+      mine.forEach((sc) => addBtn(w, sc.name, USER_TYPES.includes(sc.type) ? 'mod' : '', () => { closeCard(); runShortcut(sc); }));
+    }
+
+    // laatste berichten van deze gebruiker in deze chat
+    const hist = card.querySelector('.card-hist');
+    const msgs = [...zoneEls[ch].msgs.querySelectorAll('.msg')].filter((m) => m.dataset.user === user).slice(-8);
+    msgs.forEach((m) => {
+      const d = document.createElement('div');
+      d.className = 'hmsg' + (m.classList.contains('deleted') ? ' deleted' : '');
+      d.innerHTML = '<span class="time">' + m.querySelector('.time').textContent + '</span> ' + m.querySelector('.text').innerHTML;
+      hist.appendChild(d);
+    });
+
+    // profielfoto en aanmaakdatum (alleen als je ingelogd bent)
+    const info = card.querySelector('.card-info');
+    if (state.me && ch !== 'demo') {
+      helix('GET', 'users', { login: user }).then((j) => {
+        const u = j.data[0];
+        if (!u || cardFor !== user) return;
+        const img = card.querySelector('.avatar');
+        img.src = u.profile_image_url; img.hidden = false;
+        info.textContent = 'Account aangemaakt: ' + new Date(u.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
+      }).catch(() => {});
+    }
+
+    card.hidden = false;
+    const r = card.getBoundingClientRect();
+    card.style.left = Math.max(8, Math.min(x + 8, innerWidth - r.width - 8)) + 'px';
+    card.style.top = Math.max(8, Math.min(y + 8, innerHeight - r.height - 8)) + 'px';
+  }
+
+  function closeCard() { $('#card').hidden = true; cardFor = null; }
+  document.addEventListener('mousedown', (e) => {
+    if (!$('#card').hidden && !e.target.closest('#card') && !e.target.closest('.msg .user')) closeCard();
+  });
+
   // ---------- sneltoetsen ----------
   function comboFromEvent(e) {
     if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return null;
@@ -872,7 +980,7 @@
       if (e.key === 'Escape') document.querySelectorAll('.modal-bg.open').forEach((m) => m.classList.remove('open'));
       return;
     }
-    if (e.key === 'Escape') { clearSel(); return; }
+    if (e.key === 'Escape') { if (!$('#card').hidden) closeCard(); else clearSel(); return; }
     const c = comboFromEvent(e);
     if (!c) return;
     // tijdens typen alleen combinaties met Ctrl/Alt of F-toetsen
