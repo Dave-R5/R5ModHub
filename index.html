@@ -60,7 +60,17 @@
   .msg .user { font-weight: 700; }
   .msg img.emote { height: 24px; vertical-align: middle; margin: -4px 0; }
   .paused { text-align: center; font-size: 12px; background: var(--accent); cursor: pointer; padding: 3px; }
-  .zone-foot { padding: 6px; border-top: 1px solid var(--line); }
+  .zone-foot { padding: 6px; border-top: 1px solid var(--line); display: flex; gap: 4px; align-items: center; }
+  .emo-btn { font-size: 18px; padding: 2px 8px; }
+  #picker { position: fixed; z-index: 15; max-height: 50vh; display: flex; flex-direction: column; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.5); padding: 8px; }
+  #picker[hidden] { display: none; }
+  .pk-body { overflow-y: auto; margin-top: 6px; }
+  .pk-title { font-size: 12px; color: var(--muted); margin: 8px 0 4px; }
+  .pk-grid { display: flex; flex-wrap: wrap; gap: 2px; }
+  .pk-e { width: 40px; height: 40px; padding: 4px; background: transparent; border-color: transparent; display: flex; align-items: center; justify-content: center; }
+  .pk-e:hover { background: var(--panel2); border-color: var(--line); }
+  .pk-e img { max-width: 32px; max-height: 32px; }
 
   #tabs { display: flex; gap: 2px; padding: 6px 12px 0; background: var(--panel); border-bottom: 1px solid var(--line); overflow-x: auto; }
   .tab { display: flex; align-items: center; gap: 4px; padding: 6px 12px; border: 1px solid transparent; border-bottom: 0;
@@ -237,12 +247,13 @@
 </div>
 
 <div id="card" hidden></div>
+<div id="picker" hidden></div>
 <div id="toasts"></div>
 
 <script>
 (() => {
   'use strict';
-  const SCOPES = ['chat:read', 'chat:edit', 'moderator:manage:banned_users', 'moderator:manage:chat_messages'];
+  const SCOPES = ['chat:read', 'chat:edit', 'moderator:manage:banned_users', 'moderator:manage:chat_messages', 'user:read:emotes'];
   const MAX_MSGS = 300;
   const TYPE_LABEL = { msg: 'Chatbericht', timeout: 'Timeout', ban: 'Ban', unban: 'Unban', delete: 'Verwijderen' };
   const USER_TYPES = ['timeout', 'ban', 'unban', 'delete'];
@@ -412,7 +423,10 @@
     switch (m.command) {
       case 'PING': irc.send('PONG :' + (m.params[0] || 'tmi.twitch.tv')); break;
       case 'JOIN': if (m.prefix.startsWith((state.me ? state.me.login : 'justinfan'))) setLive(true, ch); break;
-      case 'ROOMSTATE': setLive(true, ch); break;
+      case 'ROOMSTATE':
+        setLive(true, ch);
+        if (m.tags['room-id']) { idCache[ch] = m.tags['room-id']; loadChannelEmotes(ch, m.tags['room-id']); }
+        break;
       case 'PRIVMSG': {
         let text = m.params[1] || '';
         const action = text.startsWith('\u0001ACTION ');
@@ -565,11 +579,13 @@
     root.dataset.channel = z.channel;
     root.insertAdjacentHTML('beforeend',
       '<div class="msgs"></div><div class="paused" hidden>Gepauzeerd, klik om naar beneden te gaan</div>' +
-      '<div class="zone-foot"><input placeholder="Bericht naar ' + esc(z.channel) + '…" autocomplete="off"></div>');
+      '<div class="zone-foot"><input placeholder="Bericht naar ' + esc(z.channel) + '…" autocomplete="off">' +
+      '<button class="icon emo-btn" title="Emotes">☺</button></div>');
     const msgs = root.querySelector('.msgs');
     const paused = root.querySelector('.paused');
     const input = root.querySelector('input');
     Object.assign(zone, { msgs, paused, input, stick: true });
+    root.querySelector('.emo-btn').onclick = (e) => { e.stopPropagation(); togglePicker(z.channel, input); };
 
     root.addEventListener('mousedown', () => setActive(z.channel));
     msgs.addEventListener('scroll', () => {
@@ -701,7 +717,7 @@
     const color = d.color || nameColor(d.user);
     el.innerHTML = '<span class="time">' + String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') + '</span>' +
       badges + '<span class="user" style="color:' + esc(color) + '">' + esc(d.name) + '</span>' +
-      (d.action ? ' ' : ': ') + '<span class="text"' + (d.action ? ' style="color:' + esc(color) + '"' : '') + '>' + renderText(d.text, d.emotes) + '</span>';
+      (d.action ? ' ' : ': ') + '<span class="text"' + (d.action ? ' style="color:' + esc(color) + '"' : '') + '>' + renderText(d.text, d.emotes, ch, d.own) + '</span>';
     appendTo(z, el);
   }
 
@@ -730,7 +746,7 @@
     z.msgs.querySelectorAll('.msg').forEach((el) => { if (match(el)) el.classList.add('deleted'); });
   }
 
-  function renderText(text, emotes) {
+  function renderText(text, emotes, ch, own) {
     const chars = Array.from(text);
     const ranges = [];
     if (emotes) emotes.split('/').forEach((e) => {
@@ -740,13 +756,126 @@
     ranges.sort((x, y) => x.a - y.a);
     let out = '', i = 0;
     ranges.forEach((r) => {
-      out += esc(chars.slice(i, r.a).join(''));
+      out += renderWords(chars.slice(i, r.a).join(''), ch, own);
       const name = chars.slice(r.a, r.b + 1).join('');
       out += '<img class="emote" alt="' + esc(name) + '" title="' + esc(name) + '" src="https://static-cdn.jtvnw.net/emoticons/v2/' + encodeURIComponent(r.id) + '/default/dark/1.0">';
       i = r.b + 1;
     });
-    return out + esc(chars.slice(i).join(''));
+    return out + renderWords(chars.slice(i).join(''), ch, own);
   }
+
+  // ---------- emotes (Twitch en 7TV) ----------
+  // per bron een lijst naam -> afbeelding; Twitch-emotes in berichten van anderen komen via de chat zelf mee
+  const emo = { stvGlobal: {}, stvChan: {}, twGlobal: {}, twUser: {}, twChan: {} };
+
+  function renderWords(str, ch, own) {
+    if (!str) return '';
+    return str.split(/(\s+)/).map((w) => {
+      const url = (emo.stvChan[ch] || {})[w] || emo.stvGlobal[w] ||
+        (own && ((emo.twChan[ch] || {})[w] || emo.twUser[w] || emo.twGlobal[w]));
+      return url ? '<img class="emote" alt="' + esc(w) + '" title="' + esc(w) + '" src="' + esc(url) + '">' : esc(w);
+    }).join('');
+  }
+
+  function stvMap(list) {
+    const m = {};
+    (list || []).forEach((e) => {
+      const h = e.data && e.data.host;
+      if (h && h.url) m[e.name] = 'https:' + h.url + '/1x.webp';
+    });
+    return m;
+  }
+  async function load7tvGlobal() {
+    try {
+      const r = await fetch('https://7tv.io/v3/emote-sets/global');
+      if (r.ok) emo.stvGlobal = stvMap((await r.json()).emotes);
+    } catch {}
+  }
+
+  function twMap(j, into) {
+    const t = j.template || 'https://static-cdn.jtvnw.net/emoticons/v2/{{id}}/{{format}}/{{theme_mode}}/{{scale}}';
+    (j.data || []).forEach((e) => {
+      into[e.name] = t.replace('{{id}}', e.id).replace('{{format}}', (e.format || []).includes('animated') ? 'animated' : 'static')
+        .replace('{{theme_mode}}', 'dark').replace('{{scale}}', '1.0');
+    });
+    return into;
+  }
+  async function loadTwitchEmotes() {
+    if (!state.me) return;
+    try { emo.twGlobal = twMap(await helix('GET', 'chat/emotes/global'), {}); } catch {}
+    // jouw eigen emotes (abonnementen e.d.); werkt pas na opnieuw inloggen met de nieuwe rechten
+    try {
+      const all = {};
+      let cursor = '';
+      for (let i = 0; i < 20; i++) {
+        const j = await helix('GET', 'chat/emotes/user', cursor ? { user_id: state.me.user_id, after: cursor } : { user_id: state.me.user_id });
+        twMap(j, all);
+        cursor = j.pagination && j.pagination.cursor;
+        if (!cursor) break;
+      }
+      emo.twUser = all;
+    } catch {}
+  }
+  const chanLoaded = {};
+  async function loadChannelEmotes(ch, roomId) {
+    if (chanLoaded[ch]) return;
+    chanLoaded[ch] = true;
+    try {
+      const r = await fetch('https://7tv.io/v3/users/twitch/' + roomId);
+      if (r.ok) { const j = await r.json(); emo.stvChan[ch] = stvMap(j.emote_set && j.emote_set.emotes); }
+    } catch {}
+    if (state.me) try { emo.twChan[ch] = twMap(await helix('GET', 'chat/emotes', { broadcaster_id: roomId }), {}); } catch {}
+  }
+
+  let pickerFor = null;
+  function togglePicker(ch, input) {
+    const pk = $('#picker');
+    if (!pk.hidden && pickerFor === ch) { pk.hidden = true; return; }
+    pickerFor = ch;
+    const groups = [
+      ['7TV ' + ch, emo.stvChan[ch]], ['Twitch ' + ch, emo.twChan[ch]], ['Jouw Twitch-emotes', emo.twUser],
+      ['Twitch algemeen', emo.twGlobal], ['7TV algemeen', emo.stvGlobal],
+    ].filter(([, m]) => m && Object.keys(m).length);
+    pk.innerHTML = '<input class="pk-search" placeholder="Zoek emote…" autocomplete="off"><div class="pk-body"></div>';
+    const body = pk.querySelector('.pk-body');
+    const draw = (q) => {
+      body.innerHTML = '';
+      const seen = new Set();
+      groups.forEach(([title, m]) => {
+        const names = Object.keys(m).filter((n) => !seen.has(n) && (!q || n.toLowerCase().includes(q))).sort((a, b) => a.localeCompare(b));
+        if (!names.length) return;
+        body.insertAdjacentHTML('beforeend', '<div class="pk-title">' + esc(title) + '</div>');
+        const grid = document.createElement('div'); grid.className = 'pk-grid';
+        names.forEach((n) => {
+          seen.add(n);
+          const b = document.createElement('button');
+          b.className = 'pk-e'; b.title = n;
+          b.innerHTML = '<img loading="lazy" alt="' + esc(n) + '" src="' + esc(m[n]) + '">';
+          b.onclick = () => {
+            const v = input.value;
+            input.value = v + (v && !v.endsWith(' ') ? ' ' : '') + n + ' ';
+            input.focus();
+          };
+          grid.appendChild(b);
+        });
+        body.appendChild(grid);
+      });
+      if (!body.children.length) body.innerHTML = '<p class="hint" style="padding:8px">' +
+        (q ? 'Geen emotes gevonden.' : 'Nog geen emotes geladen. Twitch-emotes verschijnen als je bent ingelogd.') + '</p>';
+    };
+    draw('');
+    pk.querySelector('.pk-search').oninput = (e) => draw(e.target.value.trim().toLowerCase());
+    pk.hidden = false;
+    const r = input.getBoundingClientRect();
+    const w = Math.min(340, innerWidth - 16);
+    pk.style.width = w + 'px';
+    pk.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + 'px';
+    pk.style.bottom = (innerHeight - r.top + 6) + 'px';
+    pk.querySelector('.pk-search').focus();
+  }
+  document.addEventListener('mousedown', (e) => {
+    if (!$('#picker').hidden && !e.target.closest('#picker') && !e.target.closest('.emo-btn')) $('#picker').hidden = true;
+  });
 
   // ---------- selectie ----------
   function select(ch, el) {
@@ -764,10 +893,10 @@
 
   // ---------- acties ----------
   function sendChat(ch, text) {
-    if (ch === 'demo') { addMsg('demo', { user: 'jij', name: state.me ? state.me.login : 'jij', text, badges: 'moderator' }); return; }
+    if (ch === 'demo') { addMsg('demo', { user: 'jij', name: state.me ? state.me.login : 'jij', text, badges: 'moderator', own: true }); return; }
     if (!state.me) return toast('Log in (⚙) om berichten te versturen.', 'err');
     irc.send('PRIVMSG #' + ch + ' :' + text.replace(/[\r\n]+/g, ' '));
-    addMsg(ch, { user: state.me.login, name: state.me.login, text, badges: 'moderator' });
+    addMsg(ch, { user: state.me.login, name: state.me.login, text, badges: 'moderator', own: true });
   }
 
   async function runShortcut(sc) {
@@ -980,7 +1109,11 @@
       if (e.key === 'Escape') document.querySelectorAll('.modal-bg.open').forEach((m) => m.classList.remove('open'));
       return;
     }
-    if (e.key === 'Escape') { if (!$('#card').hidden) closeCard(); else clearSel(); return; }
+    if (e.key === 'Escape') {
+      if (!$('#picker').hidden) $('#picker').hidden = true;
+      else if (!$('#card').hidden) closeCard(); else clearSel();
+      return;
+    }
     const c = comboFromEvent(e);
     if (!c) return;
     // tijdens typen alleen combinaties met Ctrl/Alt of F-toetsen
@@ -1035,7 +1168,7 @@
     if (!t) return;
     state.token = t; store.set('token', t);
     await validate();
-    if (state.me) { irc.reconnect(); toast('Ingelogd als ' + state.me.login, 'ok'); }
+    if (state.me) { irc.reconnect(); loadTwitchEmotes(); toast('Ingelogd als ' + state.me.login, 'ok'); }
   };
   $('#exportBtn').onclick = () => {
     const blob = new Blob([JSON.stringify({ tabs: state.tabs, shortcuts: state.shortcuts, clientId: state.clientId }, null, 2)], { type: 'application/json' });
@@ -1068,7 +1201,8 @@
   renderShortcuts();
   renderTabs();
   renderZones();
-  validate().then(() => irc.connect());
+  load7tvGlobal();
+  validate().then(() => { irc.connect(); loadTwitchEmotes(); });
 })();
 </script>
 </body>
