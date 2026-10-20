@@ -109,6 +109,13 @@
   .msg .stv-badge { height: 18px; vertical-align: -4px; margin-right: 3px; }
   .msg img.emote { height: 24px; vertical-align: middle; margin: -4px 0; }
   .paused { text-align: center; font-size: 12px; background: var(--accent); cursor: pointer; padding: 3px; }
+  .msg .rbtn { display: none; float: right; margin-left: 4px; padding: 0 6px; font-size: 12px; line-height: 18px; background: var(--panel); color: var(--muted); }
+  .msg:hover .rbtn, .msg.sel .rbtn { display: inline-block; }
+  .msg .rbtn:hover { color: var(--text); }
+  .rctx { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .replybar { display: flex; gap: 6px; align-items: center; padding: 4px 8px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); background: var(--panel2); }
+  .replybar span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .replybar[hidden] { display: none; }
   .zone-foot { padding: 6px; border-top: 1px solid var(--line); display: flex; gap: 4px; align-items: center; }
   .emo-btn { font-size: 18px; padding: 2px 8px; }
   #picker { position: fixed; z-index: 15; max-height: 50vh; display: flex; flex-direction: column; background: var(--panel);
@@ -735,6 +742,7 @@
           badges: m.tags.badges || '', emotes: m.tags.emotes || '', text, action,
           first: m.tags['first-msg'] === '1', bits: +m.tags.bits || 0,
           ts: +m.tags['tmi-sent-ts'] || 0, hist: m.tags.historical === '1',
+          replyName: m.tags['reply-parent-display-name'] || '', replyBody: m.tags['reply-parent-msg-body'] || '',
         });
         break;
       }
@@ -1200,12 +1208,14 @@
     root.querySelector('[data-act=dd]').onclick = (e) => { e.stopPropagation(); openChatDd(z.channel, e.currentTarget); };
     root.insertAdjacentHTML('beforeend',
       '<div class="msgs"></div><div class="paused" hidden>Gepauzeerd, klik om naar beneden te gaan</div>' +
+      '<div class="replybar" hidden><span></span><button class="icon" title="Antwoord annuleren">✕</button></div>' +
       '<div class="zone-foot"><input placeholder="Bericht naar ' + esc(z.channel) + '…" autocomplete="off">' +
       '<button class="icon emo-btn" title="Emotes">☺</button></div>');
     const msgs = root.querySelector('.msgs');
     const paused = root.querySelector('.paused');
     const input = root.querySelector('input');
-    Object.assign(zone, { msgs, paused, input, stick: true });
+    Object.assign(zone, { msgs, paused, input, stick: true, replyBar: root.querySelector('.replybar') });
+    zone.replyBar.querySelector('button').onclick = () => setReply(zone, null);
     root.querySelector('.emo-btn').onclick = (e) => { e.stopPropagation(); togglePicker(z.channel, input); };
 
     root.addEventListener('mousedown', () => setActive(z.channel));
@@ -1215,13 +1225,15 @@
     });
     paused.onclick = () => { msgs.scrollTop = msgs.scrollHeight; };
     msgs.addEventListener('click', (e) => {
+      if (e.target.closest('.rbtn')) { setReply(zone, e.target.closest('.msg')); return; }
       const el = e.target.closest('.msg');
       if (!el || !el.dataset.user) return;
       select(z.channel, el);
       if (e.target.closest('.user')) openCard(z.channel, el, e.clientX, e.clientY);
     });
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && input.value.trim()) { sendChat(z.channel, input.value.trim()); input.value = ''; }
+      if (e.key === 'Escape' && zone.replyTo) { e.stopPropagation(); setReply(zone, null); return; }
+      if (e.key === 'Enter' && input.value.trim()) { sendChat(z.channel, input.value.trim(), zone.replyTo); input.value = ''; setReply(zone, null); }
     });
     if (z.channel === 'demo') startDemo(zone); else loadHistory(zone);
     return zone;
@@ -1722,7 +1734,9 @@
     if (d.first) { tags += '<span class="tag first">Eerste bericht</span>'; el.classList.add('hl-first'); }
     if (isNewAcc(d.userId)) tags += NEWACC_TAG;
     if (d.bits) { tags += '<span class="tag bits">💎 ' + d.bits + ' bits</span>'; el.classList.add('hl-bits'); }
-    el.innerHTML = '<span class="time">' + hhmm(t) + '</span>' +
+    el.innerHTML = (d.replyName ? '<div class="rctx">↩ Antwoord op <b>@' + esc(d.replyName) + '</b>: ' + esc(d.replyBody) + '</div>' : '') +
+      (d.id && !d.own ? '<button class="rbtn" title="Antwoorden op dit bericht">↩</button>' : '') +
+      '<span class="time">' + hhmm(t) + '</span>' +
       badges + tags + noteIcon(d.user) + '<span class="user" style="color:' + esc(color) + '">' + esc(d.name) + '</span>' +
       (d.action ? ' ' : ': ') + '<span class="text"' + (d.action ? ' style="color:' + esc(color) + '"' : '') + '>' + renderText(d.text, d.emotes, ch, d.own, d.userId) + '</span>';
     apply7tvStyle(el, d.userId);
@@ -2383,11 +2397,24 @@
   }
 
   // ---------- acties ----------
-  function sendChat(ch, text) {
-    if (ch === 'demo') { addMsg('demo', { user: 'jij', name: state.me ? state.me.login : 'jij', text, badges: 'moderator', own: true, userId: state.me ? state.me.user_id : 'jij' }); return; }
+  function sendChat(ch, text, reply) {
+    // net als op Twitch zelf begint een antwoord met @naam
+    if (reply && !text.toLowerCase().startsWith('@' + reply.name.toLowerCase())) text = '@' + reply.name + ' ' + text;
+    const ctx = reply ? { replyName: reply.name, replyBody: reply.text } : {};
+    if (ch === 'demo') { addMsg('demo', { user: 'jij', name: state.me ? state.me.login : 'jij', text, badges: 'moderator', own: true, userId: state.me ? state.me.user_id : 'jij', ...ctx }); return; }
     if (!state.me) return toast('Log in (⚙) om berichten te versturen.', 'err');
-    irc.send('PRIVMSG #' + ch + ' :' + text.replace(/[\r\n]+/g, ' '));
-    addMsg(ch, { user: state.me.login, name: state.me.login, text, badges: 'moderator', own: true, userId: state.me.user_id });
+    irc.send((reply ? '@reply-parent-msg-id=' + reply.id + ' ' : '') + 'PRIVMSG #' + ch + ' :' + text.replace(/[\r\n]+/g, ' '));
+    addMsg(ch, { user: state.me.login, name: state.me.login, text, badges: 'moderator', own: true, userId: state.me.user_id, ...ctx });
+  }
+
+  // antwoorden op een bericht (zoals de reply-knop op Twitch)
+  function setReply(zone, el) {
+    if (!el || !el.dataset.id) { zone.replyTo = null; zone.replyBar.hidden = true; return; }
+    const nameEl = el.querySelector('.user'), textEl = el.querySelector('.text');
+    zone.replyTo = { id: el.dataset.id, name: nameEl ? nameEl.textContent : el.dataset.user, text: textEl ? textEl.textContent : '' };
+    zone.replyBar.querySelector('span').innerHTML = '↩ Antwoord aan <b>@' + esc(zone.replyTo.name) + '</b>: ' + esc(zone.replyTo.text);
+    zone.replyBar.hidden = false;
+    zone.input.focus();
   }
 
   async function runShortcut(sc) {
@@ -2482,6 +2509,7 @@
       wrap.appendChild(b);
     };
     CARD_ACTIONS.forEach((a) => addBtn(acts, a.name, a.type === 'ban' ? 'danger' : 'mod', () => { closeCard(); runShortcut({ ...a, reason: '' }); }));
+    if (el.dataset.id && zoneEls[ch] && zoneEls[ch].replyBar) addBtn(acts, '↩ Antwoorden', '', () => { closeCard(); setReply(zoneEls[ch], el); });
     addBtn(acts, '@ Noemen', '', () => {
       const z = zoneEls[ch];
       closeCard();
