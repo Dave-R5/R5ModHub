@@ -264,7 +264,7 @@
   }
 
   // ---------- inloggen ----------
-  const redirectUri = location.origin + location.pathname;
+  const redirectUri = location.origin + location.pathname.replace(/index\.html$/, '');
 
   function readTokenFromHash() {
     if (!location.hash.includes('access_token=')) return;
