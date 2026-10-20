@@ -56,6 +56,29 @@
   body.reordering, body.reordering * { cursor: grabbing !important; }
   .zone.drop-before { box-shadow: -5px 0 0 var(--accent); }
   .zone.drop-after { box-shadow: 5px 0 0 var(--accent); }
+  .zone.drop-under { box-shadow: 0 5px 0 var(--accent); }
+  .zcol { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+  .zone.modlog { width: 380px; height: 420px; }
+  .zone.modlog .dot, .zone.graph .dot { display: none; }
+  .zone.modlog .ml-list { flex: 1; max-height: none; padding: 0 8px; }
+  .zone.modlog .ml-row .time { min-width: 38px; }
+  .zone.graph { width: 640px; height: 230px; }
+  .zone.graph .zone-head .gnow { font-size: 12px; color: var(--muted); font-weight: 400; white-space: nowrap; }
+  .gbox { flex: 1; min-height: 0; position: relative; }
+  .gbox svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .gbox svg text { fill: var(--muted); font-size: 11px; }
+  .gbox .gempty { margin: auto; padding: 16px; color: var(--muted); text-align: center; font-size: 13px; }
+  #bellBtn { position: relative; }
+  #bellBtn .bcount { position: absolute; top: -6px; right: -6px; background: var(--danger); color: #fff; border-radius: 9px; font-size: 10px; min-width: 17px; padding: 1px 4px; line-height: 15px; }
+  #bellDd { position: fixed; z-index: 16; width: 340px; max-width: calc(100vw - 16px); max-height: 60vh; overflow-y: auto; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.5); padding: 6px 0; }
+  #bellDd[hidden] { display: none; }
+  .bn { display: block; width: 100%; text-align: left; border: 0; border-radius: 0; background: transparent; padding: 8px 12px; font-size: 13px; }
+  .bn:hover { background: var(--panel2); }
+  .bn small { color: var(--muted); display: block; }
+  .bn.unread { border-left: 3px solid var(--accent); }
+  #cloudInd { font-size: 12px; white-space: nowrap; background: transparent; border-color: transparent; color: var(--ok); }
+  #cloudInd.wait { color: var(--muted); } #cloudInd.err { color: #ff6b6b; }
   .tab.drop-before { box-shadow: inset 3px 0 0 var(--accent); }
   .tab.drop-after { box-shadow: inset -3px 0 0 var(--accent); }
   .zone-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--line);
@@ -164,6 +187,7 @@
   }
   @media (max-width: 768px) {
     #shortcutBar, header h1 { display: none; }
+    #cloudInd { font-size: 0; } #cloudInd::before { content: '☁'; font-size: 16px; }
     #viewBtn, #modlogBtn { font-size: 0; } #viewBtn::before { content: '▣'; font-size: 16px; } #modlogBtn::before { content: '📋'; font-size: 16px; }
     header { gap: 6px; }
     #selInfo { max-width: 40vw; }
@@ -262,6 +286,8 @@
     <button id="addZoneBtn" title="Zone toevoegen in dit tabblad">+ Zone</button>
     <div id="shortcutBar"></div>
     <button id="addScBtn" class="primary" title="Sneltoetsen bewerken of verwijderen">✎ Sneltoetsen</button>
+    <button id="cloudInd" hidden title="Cloud-back-up (klik voor instellingen)"></button>
+    <button id="bellBtn" title="Meldingen">🔔</button>
     <button id="modlogBtn" title="Modlog: wat jij als mod hebt gedaan">📋 Modlog</button>
     <button id="viewBtn" hidden title="Weergave kiezen">▣ Weergave</button>
     <span id="selInfo"></span>
@@ -284,6 +310,8 @@
       <option value="both">Stream én chat (video met chat ernaast)</option>
       <option value="all">Stream, chat én kijkers</option>
       <option value="users">Alleen kijkerslijst</option>
+      <option value="modlog">Modlog van dit kanaal</option>
+      <option value="graph">Kijkersgrafiek</option>
     </select>
     <div id="zoneNameWrap">
     <label for="zoneName">Kanaalnaam (zoals in twitch.tv/<b>naam</b>)</label>
@@ -458,6 +486,7 @@
 
 <div id="card" hidden></div>
 <div id="chatdd" hidden></div>
+<div id="bellDd" hidden></div>
 <div id="picker" hidden></div>
 <div id="toasts"></div>
 
@@ -676,6 +705,7 @@
           raid: '🚀 ' + (t['msg-param-displayName'] || who) + ' raidt met ' + (t['msg-param-viewerCount'] || '?') + ' kijkers',
           announcement: '📣 Mededeling van ' + who,
         }[t['msg-id']] || (t['system-msg'] ? '✨ ' + t['system-msg'] : '');
+        if (t['msg-id'] === 'raid') { (raidMarks[ch] || (raidMarks[ch] = [])).push([Date.now(), +t['msg-param-viewerCount'] || 0]); const gz = zoneEls['graph:' + ch]; if (gz) gz.redraw(); }
         if (txt) addEvent(ch, txt, m.params[1] || '', t.emotes || '', t['user-id']);
         break;
       }
@@ -705,12 +735,19 @@
 
   // ---------- tabbladen ----------
   // slepen om te herordenen (werkt met muis en touch)
-  function dragReorder(handle, item, selector, commit) {
+  // zone uit de lijst halen zonder dat de zone eronder in de kolom ervoor belandt
+  function detachZone(zones, z) {
+    const i = zones.indexOf(z);
+    if (i < 0) return;
+    if (!z.under && zones[i + 1] && zones[i + 1].under) zones[i + 1].under = false;
+    zones.splice(i, 1);
+  }
+  function dragReorder(handle, item, selector, commit, allowUnder) {
     handle.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || e.target.closest('button')) return;
       const sx = e.clientX, sy = e.clientY;
-      let on = false, target = null, after = false;
-      const clear = () => document.querySelectorAll('.drop-before, .drop-after').forEach((x) => x.classList.remove('drop-before', 'drop-after'));
+      let on = false, target = null, after = false, under = false;
+      const clear = () => document.querySelectorAll('.drop-before, .drop-after, .drop-under').forEach((x) => x.classList.remove('drop-before', 'drop-after', 'drop-under'));
       const move = (ev) => {
         if (!on) {
           if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
@@ -725,8 +762,9 @@
         target = null;
         if (t && t !== item) {
           const r = t.getBoundingClientRect();
+          under = !!allowUnder && ev.clientY > r.top + r.height * 0.7;
           after = ev.clientX > r.left + r.width / 2;
-          t.classList.add(after ? 'drop-after' : 'drop-before');
+          t.classList.add(under ? 'drop-under' : after ? 'drop-after' : 'drop-before');
           target = t;
         }
       };
@@ -737,7 +775,7 @@
         clear();
         item.classList.remove('dragging');
         document.body.classList.remove('resizing', 'reordering');
-        if (on) { item.dragEnd = Date.now(); if (target) commit(target, after); }
+        if (on) { item.dragEnd = Date.now(); if (target) commit(target, after, under); }
       };
       addEventListener('pointermove', move, true);
       addEventListener('pointerup', up, true);
@@ -806,7 +844,9 @@
   // Een chatzone per kanaal; staat hetzelfde kanaal in meerdere tabbladen,
   // dan verhuist dezelfde zone mee naar het tabblad dat open is.
   const zoneEls = {};
-  const keyOf = (z) => z.kind === 'buttons' ? 'buttons' : (z.kind === 'stream' || z.kind === 'users' ? z.kind + ':' : '') + z.channel;
+  const keyOf = (z) => z.kind === 'buttons' ? 'buttons' : (['stream', 'users', 'modlog', 'graph'].includes(z.kind) ? z.kind + ':' : '') + z.channel;
+  const buildAny = (z) => z.kind === 'stream' ? buildStream(z) : z.kind === 'buttons' ? buildPad(z) : z.kind === 'users' ? buildUsers(z)
+    : z.kind === 'modlog' ? buildModlogZone(z) : z.kind === 'graph' ? buildGraphZone(z) : buildZone(z);
 
   function renderZones() {
     const wrap = $('#zones');
@@ -821,18 +861,34 @@
       zones.splice(fc + 1, 0, { kind: 'buttons', channel: 'knoppen' });
       saveTabs();
     }
+    // eenmalig per tabblad: modlog onder de knoppen en de kijkersgrafiek onder de stream (mag je daarna weghalen)
+    if (fc >= 0 && !curTab().extras) {
+      const ch = zones[fc].channel;
+      const bi = zones.findIndex((z) => z.kind === 'buttons');
+      if (!zones.some((z) => z.kind === 'modlog')) zones.splice(bi + 1, 0, { kind: 'modlog', channel: ch, under: true });
+      const si = zones.findIndex((z) => z.kind === 'stream' && z.channel === ch);
+      if (si >= 0 && !zones.some((z) => z.kind === 'graph')) zones.splice(si + 1, 0, { kind: 'graph', channel: ch, under: true });
+      curTab().extras = true;
+      saveTabs();
+    }
     if (!zones.length) {
       wrap.insertAdjacentHTML('beforeend', '<div id="emptyHint"><p>Dit tabblad is nog leeg.</p><p>Klik op <b>+ Zone</b> om een chat of streamweergave toe te voegen. Probeer <b>demo</b> om alles te testen zonder in te loggen.</p></div>');
       return;
     }
-    zones.forEach((z) => {
+    let col = null;
+    zones.forEach((z, i) => {
       const k = keyOf(z);
-      if (!zoneEls[k]) zoneEls[k] = z.kind === 'stream' ? buildStream(z) : z.kind === 'buttons' ? buildPad(z) : z.kind === 'users' ? buildUsers(z) : buildZone(z);
+      if (!zoneEls[k]) zoneEls[k] = buildAny(z);
       const el = zoneEls[k].root;
       el.style.width = z.w ? z.w + 'px' : '';
       el.style.height = z.h ? z.h + 'px' : '';
       zoneEls[k].tabZone = z;
-      wrap.appendChild(el);
+      // zones met "under" komen in dezelfde kolom onder de vorige
+      if (z.under && i > 0) {
+        if (!col) { col = document.createElement('div'); col.className = 'zcol'; wrap.lastChild.replaceWith(col); col.appendChild(zoneEls[keyOf(zones[i - 1])].root); }
+        col.appendChild(el);
+      } else { col = null; wrap.appendChild(el); }
+      if (zoneEls[k].redraw) requestAnimationFrame(zoneEls[k].redraw);
       if (zoneEls[k].msgs && zoneEls[k].stick) zoneEls[k].msgs.scrollTop = zoneEls[k].msgs.scrollHeight;
     });
     const isChat = (z) => !z.kind || z.kind === 'chat';
@@ -863,7 +919,7 @@
 
   function ensureZone(z) {
     const k = keyOf(z);
-    if (!zoneEls[k]) zoneEls[k] = z.kind === 'stream' ? buildStream(z) : z.kind === 'buttons' ? buildPad(z) : z.kind === 'users' ? buildUsers(z) : buildZone(z);
+    if (!zoneEls[k]) zoneEls[k] = buildAny(z);
     return zoneEls[k];
   }
 
@@ -946,14 +1002,19 @@
 
     // vrij indelen: slepen aan de kop om te verplaatsen, rechtsonder slepen om te vergroten
     const head = root.querySelector('.zone-head');
-    dragReorder(head, root, '#zones > .zone', (target, after) => {
+    dragReorder(head, root, '#zones .zone', (target, after, under) => {
       const zones = curTab().zones;
       const to = Object.values(zoneEls).find((x) => x.root === target);
       if (!to || !to.tabZone) return;
-      zones.splice(zones.indexOf(zone.tabZone), 1);
-      zones.splice(zones.indexOf(to.tabZone) + (after ? 1 : 0), 0, zone.tabZone);
+      const me = zone.tabZone;
+      detachZone(zones, me);
+      let at = zones.indexOf(to.tabZone);
+      if (under) { me.under = true; at++; }
+      else if (after) { me.under = false; at++; while (zones[at] && zones[at].under) at++; }
+      else me.under = !!to.tabZone.under;
+      zones.splice(at, 0, me);
       saveTabs(); renderZones();
-    });
+    }, true);
     // tijdens het vergroten/verkleinen de video "doorzichtig" maken voor de muis,
     // anders pakt de video de muis af zodra je eroverheen sleept en hapert het
     root.addEventListener('pointerdown', (e) => {
@@ -1040,9 +1101,7 @@
     if (ch === 'demo') {
       zone.users = DEMO_USERS.map((n) => ({ user_login: n.toLowerCase(), user_name: n, user_id: n }));
       zone.roles = { kaaskop99: 1, henk_de_tank: 1, bram: 2 };
-      if (!vhist.demo) { const now = Date.now(); vhist.demo = Array.from({ length: 40 }, (_, i) => [now - (40 - i) * 120000, Math.round(60 + i * 2 + Math.sin(i / 3) * 12)]); }
-      zone.viewers = vhist.demo[vhist.demo.length - 1][1] + Math.round(Math.random() * 6 - 3);
-      recordViewers('demo', zone.viewers);
+      zone.viewers = demoViewers();
       return drawUsers(zone);
     }
     if (!state.me) { zone.list.innerHTML = '<p class="hint" style="padding:8px">Log in om de deelnemers te zien.</p>'; zone.count.textContent = ''; return; }
@@ -1146,11 +1205,28 @@
     if (a.length && now - a[a.length - 1][0] < 50000) a[a.length - 1][1] = v; else a.push([now, v]);
     while (a.length && now - a[0][0] > 12 * 3600 * 1000) a.shift();
     if (ch !== 'demo') store.set('vhist', vhist);
+    const gz = zoneEls['graph:' + ch];
+    if (gz) gz.redraw();
+  }
+  // alleen de huidige stream: alles na de laatste pauze van meer dan 20 minuten
+  function streamSamples(ch) {
+    const a = vhist[ch] || [];
+    for (let i = a.length - 1; i > 0; i--) if (a[i][0] - a[i - 1][0] > 20 * 60 * 1000) return a.slice(i);
+    return a;
+  }
+  const raidMarks = {};   // kanaal -> [[tijd, kijkers]]
+  function demoViewers() {
+    if (!vhist.demo) {
+      const now = Date.now();
+      vhist.demo = Array.from({ length: 40 }, (_, i) => [now - (40 - i) * 120000, Math.round(60 + i * 2 + Math.sin(i / 3) * 12 + (i > 25 ? 120 : 0))]);
+      raidMarks.demo = [[vhist.demo[26][0], 120]];
+    }
+    const v = Math.max(1, vhist.demo[vhist.demo.length - 1][1] + Math.round(Math.random() * 6 - 3));
+    recordViewers('demo', v);
+    return v;
   }
   function drawGraph(zone) {
-    let a = vhist[zone.channel] || [];
-    // alleen de huidige stream: alles na de laatste pauze van meer dan 20 minuten
-    for (let i = a.length - 1; i > 0; i--) if (a[i][0] - a[i - 1][0] > 20 * 60 * 1000) { a = a.slice(i); break; }
+    const a = streamSamples(zone.channel);
     if (zone.viewers === null || a.length < 2) { zone.graph.innerHTML = ''; return; }
     const W = 300, H = 44, t0 = a[0][0], t1 = a[a.length - 1][0];
     const max = Math.max(...a.map((x) => x[1])), min = Math.min(...a.map((x) => x[1]));
@@ -1209,6 +1285,83 @@
     zone.pad.appendChild(add);
   }
 
+  // ---------- modlog-zone per kanaal ----------
+  function mlRow(x, withCh) {
+    const d = new Date(x.t);
+    const day = new Date().toDateString() === d.toDateString() ? '' : d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) + ' ';
+    return '<div class="ml-row"><span class="time">' + day + hhmm(d) + '</span><span class="what">' + (x.mod ? '<span class="mod">' + esc(x.mod) + '</span> → ' : '') +
+      (x.user ? '<b>' + esc(x.user) + '</b>: ' : '') + esc(x.what) + '</span>' + (withCh ? '<span class="ch">' + esc(x.ch) + '</span>' : '') + '</div>';
+  }
+  function buildModlogZone(z) {
+    const zone = makeShell(z, '📋 Modlog ' + z.channel, '');
+    zone.root.insertAdjacentHTML('beforeend', '<div class="ml-list"></div>');
+    zone.list = zone.root.querySelector('.ml-list');
+    zone.redraw = () => {
+      const rows = modlog.filter((x) => x.ch === z.channel).slice(-150).reverse();
+      zone.list.innerHTML = rows.length ? rows.map((x) => mlRow(x, false)).join('')
+        : '<p class="hint">Nog geen modacties in ' + esc(z.channel) + '. Acties van alle mods verschijnen hier, met wie het deed, zolang R5 ModHub open staat.</p>';
+    };
+    zone.redraw();
+    return zone;
+  }
+
+  // ---------- grote kijkersgrafiek ----------
+  function buildGraphZone(z) {
+    const zone = makeShell(z, '📈 Kijkers tijdens de stream', '<span class="gnow"></span>');
+    zone.root.insertAdjacentHTML('beforeend', '<div class="gbox"></div>');
+    zone.box = zone.root.querySelector('.gbox');
+    zone.now = zone.root.querySelector('.gnow');
+    zone.redraw = () => drawBigGraph(zone);
+    new ResizeObserver(() => zone.redraw()).observe(zone.box);
+    zone.poll = async () => {
+      if (z.channel === 'demo') demoViewers();
+      else if (state.me) {
+        try {
+          const st = await helix('GET', 'streams', { user_login: z.channel });
+          zone.offline = !st.data.length;
+          if (st.data.length) recordViewers(z.channel, st.data[0].viewer_count);
+        } catch {}
+      }
+      zone.redraw();
+    };
+    zone.poll();
+    zone.timer = setInterval(() => { if (zone.root.isConnected) zone.poll(); }, 60000);
+    return zone;
+  }
+  function drawBigGraph(zone) {
+    const ch = zone.channel, a = streamSamples(ch);
+    const W = zone.box.clientWidth, H = zone.box.clientHeight;
+    if (!W || !H) return;
+    if (a.length < 2 || zone.offline) {
+      zone.now.textContent = '';
+      zone.box.innerHTML = '<div class="gempty">' + (zone.offline ? esc(ch) + ' is nu offline.' : !state.me && ch !== 'demo' ? 'Log in (⚙) om de kijkers bij te houden.'
+        : 'De grafiek vult zich zodra ' + esc(ch) + ' live is en R5 ModHub open staat (elke minuut een meetpunt).') + '</div>';
+      return;
+    }
+    const L = 36, R = 10, T = 20, B = 20, w = W - L - R, h = H - T - B;
+    const t0 = a[0][0], t1 = a[a.length - 1][0], peak = Math.max(...a.map((x) => x[1]));
+    const step = Math.pow(10, Math.floor(Math.log10(Math.max(1, peak)))) / 2;
+    const top = Math.max(step * 2, Math.ceil(peak * 1.1 / step) * step);
+    const X = (t) => L + (t - t0) / Math.max(1, t1 - t0) * w, Y = (v) => T + h - v / top * h;
+    const pts = a.map((x) => X(x[0]).toFixed(1) + ',' + Y(x[1]).toFixed(1)).join(' ');
+    let g = '';
+    [0, top / 2, top].forEach((v) => {
+      g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="#2e2e35" stroke-dasharray="4 4"/>' +
+        '<text x="' + (L - 6) + '" y="' + (Y(v) + 4) + '" text-anchor="end">' + Math.round(v) + '</text>';
+    });
+    [t0, (t0 + t1) / 2, t1].forEach((t, i) => {
+      g += '<text x="' + X(t) + '" y="' + (H - 4) + '" text-anchor="' + ['start', 'middle', 'end'][i] + '">' + hhmm(new Date(t)) + '</text>';
+    });
+    (raidMarks[ch] || []).filter((r) => r[0] >= t0 && r[0] <= t1).forEach((r) => {
+      g += '<line x1="' + X(r[0]) + '" x2="' + X(r[0]) + '" y1="' + T + '" y2="' + (T + h) + '" stroke="#ff4f8b" stroke-dasharray="3 3"/>' +
+        '<text x="' + X(r[0]) + '" y="' + (T - 6) + '" text-anchor="middle" style="fill:#ff4f8b">raid +' + r[1] + '</text>';
+    });
+    zone.box.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '">' + g +
+      '<polygon points="' + L + ',' + (T + h) + ' ' + pts + ' ' + X(t1) + ',' + (T + h) + '" fill="rgba(145,71,255,.2)"/>' +
+      '<polyline points="' + pts + '" fill="none" stroke="#9147ff" stroke-width="2.5" stroke-linejoin="round"/></svg>';
+    zone.now.textContent = 'nu ' + a[a.length - 1][1] + ' · piek ' + peak;
+  }
+
   // ---------- mijn kanalen (waar je mod bent) ----------
   const myChans = { list: null, live: {}, err: '' };
   async function loadMyChans() {
@@ -1241,8 +1394,12 @@
       myChans.list.slice(i, i + 100).forEach((c) => params.append('user_id', c.broadcaster_id));
       try { (await helix('GET', 'streams?' + params.toString())).data.forEach((st) => { live[st.user_id] = st; }); } catch {}
     }
-    if (myChans.checked && opts.notifyLive) Object.values(live).forEach((st) => {
-      if (!myChans.live[st.user_id]) notify(st.user_name + ' is live', (st.game_name ? st.game_name + ' · ' : '') + (st.title || ''), 'live-' + st.user_id);
+    if (myChans.checked) Object.values(live).forEach((st) => {
+      if (myChans.live[st.user_id]) return;
+      const body = (st.game_name ? st.game_name + ' · ' : '') + (st.title || '');
+      pushNote('live', st.user_name + ' is live', body, st.user_login);
+      toast('🔴 ' + st.user_name + ' is live: ' + (st.title || st.game_name || ''));
+      if (opts.notifyLive) notify(st.user_name + ' is live', body, 'live-' + st.user_id);
     });
     Object.values(live).forEach((st) => {
       recordViewers(st.user_login, st.viewer_count);
@@ -1299,7 +1456,7 @@
 
   function removeZone(z) {
     const tab = curTab();
-    tab.zones = tab.zones.filter((x) => x !== z);
+    detachZone(tab.zones, z);
     const k = keyOf(z);
     const stillUsed = state.tabs.some((t) => t.zones.some((x) => keyOf(x) === k));
     if (!stillUsed && zoneEls[k]) { clearInterval(zoneEls[k].demoT); clearInterval(zoneEls[k].timer); delete zoneEls[k]; }
@@ -1358,6 +1515,7 @@
       if (hitsWord(d.text)) el.classList.add('hl-word');
       if (mentionsMe(d.text, ch)) {
         el.classList.add('hl-mention');
+        pushNote('mention', d.name + ' noemt je in ' + ch, d.text, ch);
         if (opts.notifyMention && (document.hidden || !document.hasFocus())) notify(d.name + ' noemt je in ' + ch, d.text, 'mention-' + ch);
       }
       if (ch !== 'demo') checkAge(d.userId);
@@ -1425,6 +1583,50 @@
     } catch {}
     if (age.queue.size) age.t = setTimeout(flushAge, 1500);
   }
+
+  // ---------- bel: meldingen binnen R5 ModHub ----------
+  const bell = { items: store.get('bell', []) };
+  function pushNote(kind, title, body, ch) {
+    bell.items.unshift({ t: Date.now(), kind, title, body: body || '', ch, unread: true });
+    if (bell.items.length > 50) bell.items.length = 50;
+    store.set('bell', bell.items);
+    renderBell();
+    if (!$('#bellDd').hidden) drawBellDd();
+  }
+  function renderBell() {
+    const n = bell.items.filter((x) => x.unread).length;
+    $('#bellBtn').innerHTML = '🔔' + (n ? '<span class="bcount">' + (n > 99 ? '99+' : n) + '</span>' : '');
+  }
+  function drawBellDd() {
+    const dd = $('#bellDd');
+    dd.innerHTML = bell.items.length ? bell.items.map((x, i) => '<button class="bn' + (x.unread ? ' unread' : '') + '" data-i="' + i + '">' +
+      (x.kind === 'live' ? '🔴 ' : '💬 ') + esc(x.title) + '<small>' + esc(x.body.slice(0, 120)) + (x.body ? ' · ' : '') + hhmm(new Date(x.t)) + '</small></button>').join('') +
+      '<div style="padding:4px 10px"><button class="dd-link" data-clear>Alles wissen</button></div>'
+      : '<p class="hint" style="padding:8px 12px;margin:0">Nog geen meldingen. Hier komen de kanalen die live gaan en berichten waarin je genoemd wordt.</p>';
+  }
+  $('#bellBtn').onclick = () => {
+    const dd = $('#bellDd');
+    if (!dd.hidden) { dd.hidden = true; return; }
+    drawBellDd();
+    dd.hidden = false;
+    const r = $('#bellBtn').getBoundingClientRect(), w = dd.offsetWidth;
+    dd.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + 'px';
+    dd.style.top = (r.bottom + 6) + 'px';
+    bell.items.forEach((x) => { x.unread = false; });
+    store.set('bell', bell.items); renderBell();
+  };
+  $('#bellDd').onclick = (e) => {
+    if (e.target.closest('[data-clear]')) { bell.items = []; store.set('bell', bell.items); renderBell(); drawBellDd(); return; }
+    const b = e.target.closest('.bn');
+    if (!b) return;
+    const x = bell.items[+b.dataset.i];
+    $('#bellDd').hidden = true;
+    const t = state.tabs.find((tb) => tb.channel === x.ch) || state.tabs.find((tb) => tb.zones.some((z) => (!z.kind || z.kind === 'chat') && z.channel === x.ch));
+    if (t) switchTab(t.id); else if (x.kind === 'live') openChannelTab(x.ch, x.title.replace(/ is live$/, ''));
+  };
+  document.addEventListener('mousedown', (e) => {
+    if (!$('#bellDd').hidden && !e.target.closest('#bellDd') && !e.target.closest('#bellBtn')) $('#bellDd').hidden = true;
+  });
 
   // ---------- meldingen van je systeem ----------
   function notify(title, body, tag) {
@@ -1838,6 +2040,8 @@
     if (modlog.length > 3000) modlog.splice(0, modlog.length - 3000);
     store.set('modlog', modlog);
     if ($('#modlogModal').classList.contains('open')) renderModlog();
+    const mz = zoneEls['modlog:' + ch];
+    if (mz) mz.redraw();
   }
 
   // ---------- live modlog via Twitch EventSub (alle mods, met naam) ----------
@@ -1944,11 +2148,7 @@
     const q = $('#mlSearch').value.trim().toLowerCase();
     renderEsubState();
     const rows = modlog.filter((x) => (!sel.value || x.ch === sel.value) && (!q || x.user.includes(q) || (x.mod || '').toLowerCase().includes(q))).slice(-300).reverse();
-    $('#mlList').innerHTML = rows.length ? rows.map((x) => {
-      const d = new Date(x.t);
-      return '<div class="ml-row"><span class="time">' + d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) + ' ' + hhmm(d) +
-        '</span><span class="what">' + (x.mod ? '<span class="mod">' + esc(x.mod) + '</span> → ' : '') + (x.user ? '<b>' + esc(x.user) + '</b>: ' : '') + esc(x.what) + '</span><span class="ch">' + esc(x.ch) + '</span></div>';
-    }).join('') : '<p class="hint">Nog niets gelogd.</p>';
+    $('#mlList').innerHTML = rows.length ? rows.map((x) => mlRow(x, true)).join('') : '<p class="hint">Nog niets gelogd.</p>';
   }
 
   // ---------- selectie ----------
@@ -2349,6 +2549,10 @@
     return '';
   }
   async function cloudUp(quiet) {
+    renderCloudInd('busy');
+    try { await cloudUpNow(quiet); renderCloudInd('ok'); } catch (e) { renderCloudInd('err'); throw e; }
+  }
+  async function cloudUpNow(quiet) {
     const content = JSON.stringify(backupData(), null, 1);
     let id = await findGist();
     if (id) {
@@ -2371,13 +2575,24 @@
   function cloudTouch() {
     if (!opts.cloudAuto || !store.get('gistToken', '')) return;
     clearTimeout(cloudSync.t);
+    renderCloudInd('wait');
     cloudSync.t = setTimeout(() => cloudUp(true).catch((e) => toast('Cloud-back-up mislukt: ' + e.message, 'err')), 30000);
   }
+  function renderCloudInd(st) {
+    const b = $('#cloudInd'), has = !!store.get('gistToken', '');
+    b.hidden = !has;
+    if (!has) return;
+    if (st) cloudSync.st = st;
+    const cur = cloudSync.st || (store.get('cloudAt', 0) ? 'ok' : 'none');
+    b.className = { ok: '', err: 'err' }[cur] ?? 'wait';
+    b.textContent = { ok: '☁ Gesynchroniseerd', wait: '☁ Wijziging wacht', busy: '☁ Bezig…', err: '☁ Niet gelukt', none: '☁ Nog geen back-up' }[cur];
+  }
+  $('#cloudInd').onclick = () => { $('#settingsBtn').click(); $('#cloudBox').open = true; };
   function renderCloud() {
     const at = store.get('cloudAt', 0);
     $('#cloudState').textContent = at ? 'Laatste back-up naar de cloud: ' + new Date(at).toLocaleString('nl-NL') : 'Nog geen back-up in de cloud gemaakt vanaf dit apparaat.';
   }
-  $('#gistToken').onchange = () => { store.set('gistToken', $('#gistToken').value.trim()); store.del('gistId'); };
+  $('#gistToken').onchange = () => { store.set('gistToken', $('#gistToken').value.trim()); store.del('gistId'); cloudSync.st = null; renderCloudInd(); };
   $('#cloudAuto').onchange = (e) => { opts.cloudAuto = e.target.checked; saveOpts(); };
   const cloudBtn = (fn) => async (e) => {
     store.set('gistToken', $('#gistToken').value.trim());
@@ -2387,6 +2602,7 @@
   };
   $('#cloudUp').onclick = cloudBtn(() => cloudUp(false));
   $('#cloudDown').onclick = cloudBtn(() => { if (confirm('Je huidige instellingen vervangen door de back-up uit de cloud?')) return cloudDown(); });
+  renderCloudInd();
   $('#loginBtn').onclick = login;
   $('#logoutBtn').onclick = logout;
 
@@ -2437,9 +2653,10 @@
   load7tvGlobal();
   loadBttvFfzGlobal();
   applyOpts();
+  renderBell();
   validate().then(() => {
     irc.connect(); loadTwitchEmotes(); loadMy7tv(); loadMyChans(); esubConnect();
-    Object.values(zoneEls).forEach((z) => { if (z.kind === 'users') loadUsers(z); });
+    Object.values(zoneEls).forEach((z) => { if (z.kind === 'users') loadUsers(z); if (z.poll) z.poll(); });
   });
   // Installeerbare app (PWA)
   let installEvt = null;
