@@ -625,7 +625,7 @@
   function login() {
     const id = $('#clientId').value.trim() || DEFAULT_CLIENT_ID;
     if (!id) return toast('Vul eerst je Client ID in.', 'err');
-    if (location.protocol === 'file:') return toast('Inloggen werkt alleen als de pagina via http(s) draait (bijv. localhost of online). Open de pagina via twitch.daver5.nl.', 'err');
+    if (location.protocol === 'file:') return toast('Inloggen werkt alleen als de pagina via http(s) draait (bijv. localhost of online). Open de pagina via r5mod.daver5.nl.', 'err');
     if ($('#clientId').value.trim()) { state.clientId = id; store.set('clientId', id); }
     const u = new URL('https://id.twitch.tv/oauth2/authorize');
     u.search = new URLSearchParams({ client_id: id, redirect_uri: redirectUri, response_type: 'token', scope: SCOPES.join(' '), force_verify: 'true' });
