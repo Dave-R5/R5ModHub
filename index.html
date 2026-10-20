@@ -46,7 +46,14 @@
   .zone { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
     width: 360px; height: calc(100vh - 160px); min-width: 240px; min-height: 200px; resize: both; overflow: hidden; }
   .zone.active { border-color: var(--accent); }
-  .zone.dragover { outline: 2px dashed var(--accent); }
+  .zone-head .grip { color: var(--muted); font-size: 16px; line-height: 1; cursor: grab; margin-right: -2px; }
+  .zone-head, .tab { touch-action: none; }
+  .zone.dragging, .tab.dragging { opacity: .45; }
+  body.reordering, body.reordering * { cursor: grabbing !important; }
+  .zone.drop-before { box-shadow: -5px 0 0 var(--accent); }
+  .zone.drop-after { box-shadow: 5px 0 0 var(--accent); }
+  .tab.drop-before { box-shadow: inset 3px 0 0 var(--accent); }
+  .tab.drop-after { box-shadow: inset -3px 0 0 var(--accent); }
   .zone-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--line);
     cursor: grab; user-select: none; background: var(--panel2); }
   .zone-head .name { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -326,6 +333,8 @@
   if (!state.tabs.some((t) => t.id === state.tab)) state.tab = state.tabs[0].id;
   const saveTabs = () => store.set('tabs', state.tabs);
   const curTab = () => state.tabs.find((t) => t.id === state.tab);
+  // het Hoofd-tabblad (met de kanaalknoppen) blijft dat, ook als je het verplaatst
+  const mainTabId = () => (state.tabs.find((t) => t.id === 't1') || state.tabs[0]).id;
   function loadTabs() {
     const t = store.get('tabs', null);
     if (Array.isArray(t) && t.length) return t;
@@ -501,16 +510,64 @@
   }
 
   // ---------- tabbladen ----------
+  // slepen om te herordenen (werkt met muis en touch)
+  function dragReorder(handle, item, selector, commit) {
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.target.closest('button')) return;
+      const sx = e.clientX, sy = e.clientY;
+      let on = false, target = null, after = false;
+      const clear = () => document.querySelectorAll('.drop-before, .drop-after').forEach((x) => x.classList.remove('drop-before', 'drop-after'));
+      const move = (ev) => {
+        if (!on) {
+          if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
+          on = true;
+          item.classList.add('dragging');
+          document.body.classList.add('resizing', 'reordering');
+        }
+        ev.preventDefault();
+        clear();
+        const el = document.elementFromPoint(ev.clientX, ev.clientY);
+        const t = el && el.closest(selector);
+        target = null;
+        if (t && t !== item) {
+          const r = t.getBoundingClientRect();
+          after = ev.clientX > r.left + r.width / 2;
+          t.classList.add(after ? 'drop-after' : 'drop-before');
+          target = t;
+        }
+      };
+      const up = () => {
+        removeEventListener('pointermove', move, true);
+        removeEventListener('pointerup', up, true);
+        removeEventListener('pointercancel', up, true);
+        clear();
+        item.classList.remove('dragging');
+        document.body.classList.remove('resizing', 'reordering');
+        if (on) { item.dragEnd = Date.now(); if (target) commit(target, after); }
+      };
+      addEventListener('pointermove', move, true);
+      addEventListener('pointerup', up, true);
+      addEventListener('pointercancel', up, true);
+    });
+  }
+
   function renderTabs() {
     const nav = $('#tabs');
     nav.innerHTML = '';
     state.tabs.forEach((t) => {
       const b = document.createElement('div');
       b.className = 'tab' + (t.id === state.tab ? ' on' : '');
-      b.title = 'Dubbelklik om de naam te wijzigen';
+      b.title = 'Klik om te openen, sleep om te verplaatsen, dubbelklik om de naam te wijzigen';
+      b.dataset.id = t.id;
       b.innerHTML = '<span class="tname"></span>' + (state.tabs.length > 1 ? '<button class="icon tclose" title="Tabblad sluiten">✕</button>' : '');
       b.querySelector('.tname').textContent = t.name;
-      b.onclick = (e) => { if (!e.target.closest('.tclose')) switchTab(t.id); };
+      b.onclick = (e) => { if (Date.now() - (b.dragEnd || 0) < 400) return; if (!e.target.closest('.tclose')) switchTab(t.id); };
+      dragReorder(b, b, '#tabs > .tab', (target, after) => {
+        const to = state.tabs.find((x) => x.id === target.dataset.id);
+        state.tabs.splice(state.tabs.indexOf(t), 1);
+        state.tabs.splice(state.tabs.indexOf(to) + (after ? 1 : 0), 0, t);
+        saveTabs(); renderTabs(); renderZones();
+      });
       b.ondblclick = () => {
         const n = prompt('Naam van het tabblad', t.name);
         if (n && n.trim()) { t.name = n.trim().slice(0, 30); saveTabs(); renderTabs(); }
@@ -558,7 +615,7 @@
   function renderZones() {
     const wrap = $('#zones');
     wrap.innerHTML = '';
-    if (state.tab === state.tabs[0].id) wrap.appendChild(myChansEl());
+    if (state.tab === mainTabId()) wrap.appendChild(myChansEl());
     const zones = curTab().zones;
     // knoppenpaneel staat altijd in het tabblad, direct naast de eerste chat
     const fc = zones.findIndex((z) => !z.kind || z.kind === 'chat');
@@ -590,7 +647,7 @@
     const root = document.createElement('section');
     root.className = 'zone' + (z.kind && z.kind !== 'chat' ? ' ' + z.kind : '');
     root.innerHTML =
-      '<div class="zone-head" draggable="true"><span class="dot"></span><span class="name"></span>' + extraBtns +
+      '<div class="zone-head" title="Sleep de kop om de zone te verplaatsen"><span class="grip">⠿</span><span class="dot"></span><span class="name"></span>' + extraBtns +
       '<button class="icon" data-act="open" title="Open stream op Twitch">↗</button>' +
       '<button class="icon" data-act="close" title="Zone sluiten">✕</button></div>';
     root.querySelector('.name').textContent = title;
@@ -600,19 +657,12 @@
 
     // vrij indelen: slepen aan de kop om te verplaatsen, rechtsonder slepen om te vergroten
     const head = root.querySelector('.zone-head');
-    head.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/zone', keyOf(zone.tabZone)); e.dataTransfer.effectAllowed = 'move'; });
-    root.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('text/zone')) { e.preventDefault(); root.classList.add('dragover'); } });
-    root.addEventListener('dragleave', () => root.classList.remove('dragover'));
-    root.addEventListener('drop', (e) => {
-      root.classList.remove('dragover');
-      const from = e.dataTransfer.getData('text/zone');
+    dragReorder(head, root, '#zones > .zone', (target, after) => {
       const zones = curTab().zones;
-      if (!from || from === keyOf(zone.tabZone)) return;
-      e.preventDefault();
-      const fi = zones.findIndex((x) => keyOf(x) === from);
-      if (fi < 0) return;
-      const [moved] = zones.splice(fi, 1);
-      zones.splice(zones.indexOf(zone.tabZone), 0, moved);
+      const to = Object.values(zoneEls).find((x) => x.root === target);
+      if (!to || !to.tabZone) return;
+      zones.splice(zones.indexOf(zone.tabZone), 1);
+      zones.splice(zones.indexOf(to.tabZone) + (after ? 1 : 0), 0, zone.tabZone);
       saveTabs(); renderZones();
     });
     // tijdens het vergroten/verkleinen de video "doorzichtig" maken voor de muis,
@@ -822,7 +872,7 @@
       myChans.list = all; myChans.err = '';
       await loadMyChansLive();
     } catch (e) { myChans.err = e.message; }
-    if (state.tab === state.tabs[0].id) renderZones();
+    if (state.tab === mainTabId()) renderZones();
   }
   async function loadMyChansLive() {
     if (!myChans.list) return;
@@ -834,7 +884,7 @@
     }
     myChans.live = live;
   }
-  setInterval(async () => { if (myChans.list) { await loadMyChansLive(); if (state.tab === state.tabs[0].id) renderZones(); } }, 2 * 60 * 1000);
+  setInterval(async () => { if (myChans.list) { await loadMyChansLive(); if (state.tab === mainTabId()) renderZones(); } }, 2 * 60 * 1000);
 
   function myChansEl() {
     const box = document.createElement('div');
