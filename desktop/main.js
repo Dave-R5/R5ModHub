@@ -1,4 +1,4 @@
-// Modweergave desktop-app: een venster dat de live site laadt.
+// R5 ModHub desktop-app: een venster dat de live site laadt.
 // Updates van de site komen dus vanzelf mee; alleen deze schil hoeft zelden opnieuw.
 const { app, BrowserWindow, shell, Menu } = require('electron');
 
@@ -13,7 +13,7 @@ let win;
 function createWindow() {
   win = new BrowserWindow({
     width: 1400, height: 900, minWidth: 360, minHeight: 400,
-    title: 'Modweergave', backgroundColor: '#0e0e10', autoHideMenuBar: true,
+    title: 'R5 ModHub', backgroundColor: '#0e0e10', autoHideMenuBar: true,
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
   // Chrome-UA zonder "Electron", zodat Twitch het inlogscherm en de speler normaal toont.

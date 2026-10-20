@@ -1,8 +1,8 @@
 {
   "name": "modweergave",
-  "productName": "Modweergave",
+  "productName": "R5 ModHub",
   "version": "1.0.0",
-  "description": "Twitch-modweergave als Windows-app (laadt twitch.daver5.nl)",
+  "description": "R5 ModHub, modtool voor Twitch, als Windows-app (laadt twitch.daver5.nl)",
   "main": "main.js",
   "author": "Dave",
   "license": "UNLICENSED",
@@ -16,14 +16,14 @@
   },
   "build": {
     "appId": "nl.daver5.modweergave",
-    "productName": "Modweergave",
+    "productName": "R5 ModHub",
     "files": [
       "main.js",
       "package.json"
     ],
     "win": {
       "target": "nsis",
-      "artifactName": "Modweergave-Setup-${version}.exe",
+      "artifactName": "R5-ModHub-Setup-${version}.exe",
       "icon": "build/icon.png"
     },
     "nsis": {
@@ -31,7 +31,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Modweergave"
+      "shortcutName": "R5 ModHub"
     }
   },
   "repository": "github:daveroosjen5-maker/modweergave"

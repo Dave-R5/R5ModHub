@@ -1,6 +1,6 @@
 name: Windows-app bouwen
 
-# Bouwt Modweergave-Setup.exe. De .exe komt alleen in een concept-release
+# Bouwt de R5 ModHub-installer (.exe). De .exe komt alleen in een concept-release
 # (draft) en als workflow-bestand: concepten zijn niet openbaar, alleen
 # zichtbaar voor wie schrijfrechten op de repo heeft.
 on:
@@ -30,7 +30,7 @@ jobs:
         run: echo "v=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
-          name: Modweergave-Setup
+          name: R5-ModHub-Setup
           path: desktop/dist/*.exe
           retention-days: 30
       - name: Concept-release maken
@@ -40,5 +40,5 @@ jobs:
         run: |
           gh release create "desktop-v${{ steps.ver.outputs.v }}-test${{ github.run_number }}" dist/*.exe \
             --draft --target "$GITHUB_SHA" \
-            --title "Modweergave ${{ steps.ver.outputs.v }} (Windows, test ${{ github.run_number }})" \
+            --title "R5 ModHub ${{ steps.ver.outputs.v }} (Windows, test ${{ github.run_number }})" \
             --notes "Testversie. Download het .exe-bestand en voer het uit om de app te installeren."

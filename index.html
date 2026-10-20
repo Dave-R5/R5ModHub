@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#18181b">
 <link rel="icon" href="/icons/icon-192.png">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-<title>Modweergave</title>
+<title>R5 ModHub</title>
 <style>
   :root {
     --bg: #0e0e10; --panel: #18181b; --panel2: #1f1f23; --line: #2e2e35;
@@ -214,7 +214,7 @@
 <body>
 <div id="app">
   <header>
-    <h1>Modweergave</h1>
+    <h1>R5 ModHub</h1>
     <button id="addZoneBtn" title="Zone toevoegen in dit tabblad">+ Zone</button>
     <div id="shortcutBar"></div>
     <button id="addScBtn" class="primary" title="Sneltoetsen bewerken of verwijderen">✎ Sneltoetsen</button>
@@ -1814,7 +1814,7 @@
   $('#exportBtn').onclick = () => {
     const blob = new Blob([JSON.stringify({ tabs: state.tabs, shortcuts: state.shortcuts, clientId: state.clientId }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = 'modweergave-instellingen.json'; a.click();
+    a.href = URL.createObjectURL(blob); a.download = 'r5-modhub-instellingen.json'; a.click();
     URL.revokeObjectURL(a.href);
   };
   $('#importBtn').onclick = () => $('#importFile').click();
@@ -1857,13 +1857,13 @@
     || navigator.standalone || navigator.userAgent.includes('ModweergaveApp');
   function renderInstall() {
     $('#installBtn').hidden = isApp || !installEvt;
-    $('#installHint').textContent = isApp ? 'Je gebruikt de modweergave al als app.'
-      : installEvt ? 'Zet de modweergave als eigen app op je computer of telefoon, met een snelkoppeling en zonder browserbalk.'
+    $('#installHint').textContent = isApp ? 'Je gebruikt R5 ModHub al als app.'
+      : installEvt ? 'Zet R5 ModHub als eigen app op je computer of telefoon, met een snelkoppeling en zonder browserbalk.'
       : /iPhone|iPad/.test(navigator.userAgent) ? 'Installeren op iPhone of iPad: tik in Safari op Delen en kies Zet op beginscherm.'
       : 'Installeren als app: gebruik in Chrome of Edge het installeer-icoon rechts in de adresbalk, of menu ⋮ → Installeren.';
   }
   addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; renderInstall(); });
-  addEventListener('appinstalled', () => { installEvt = null; renderInstall(); toast('Modweergave is geïnstalleerd als app.', 'ok'); });
+  addEventListener('appinstalled', () => { installEvt = null; renderInstall(); toast('R5 ModHub is geïnstalleerd als app.', 'ok'); });
   $('#installBtn').onclick = async () => {
     if (!installEvt) return;
     installEvt.prompt(); await installEvt.userChoice; installEvt = null; renderInstall();

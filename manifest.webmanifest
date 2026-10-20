@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Modweergave",
-  "short_name": "Modweergave",
-  "description": "Twitch-modweergave voor meerdere kanalen, met sneltoetsen en knoppen.",
+  "name": "R5 ModHub",
+  "short_name": "R5 ModHub",
+  "description": "R5 ModHub: modtool voor Twitch, voor meerdere kanalen, met sneltoetsen en knoppen.",
   "lang": "nl",
   "start_url": "/",
   "scope": "/",
