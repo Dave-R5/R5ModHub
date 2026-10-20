@@ -327,6 +327,7 @@
     $('#loginState').innerHTML = state.me
       ? 'Ingelogd als <b>' + esc(state.me.login) + '</b>. Modacties werken in kanalen waar je mod bent.'
       : 'Niet ingelogd: je kunt chats lezen, maar niets versturen of modereren.';
+    if (state.me) $('#loginState').insertAdjacentHTML('beforeend', '<br>7TV: ' + esc(stv.status || 'bezig met laden…'));
   }
 
   function login() {
@@ -937,19 +938,49 @@
     },
   };
 
-  // Laat 7TV weten dat jij in dit kanaal zit, zodat je eigen paint, badge en emotes worden doorgestuurd.
+  // Je eigen 7TV-account: paint, badge en persoonlijke emotes rechtstreeks ophalen.
+  // (Van anderen komen die via de EventAPI; voor jezelf is daar niet op te rekenen.)
+  const STV_GQL = 'query($id: ObjectID!) { user(id: $id) { style { color paint_id badge_id ' +
+    'paint { id name function color angle shape image_url repeat stops { at color } shadows { x_offset y_offset radius color } } ' +
+    'badge { id name tooltip host { url } } } emote_sets { id flags } } }';
   async function loadMy7tv() {
     if (!state.me || stv.me) return;
+    const myId = state.me.user_id;
     try {
-      const r = await fetch('https://7tv.io/v3/users/twitch/' + state.me.user_id);
+      const r = await fetch('https://7tv.io/v3/users/twitch/' + myId);
       if (!r.ok) return;
-      const j = await r.json();
-      const u = j.user || {};
+      const u = (await r.json()).user || {};
       stv.me = u.id;
-      // persoonlijke emotes direct ophalen (vlag 4 = persoonlijke set)
-      (u.emote_sets || []).forEach((s) => { if ((s.flags & 4) === 4) loadPersonalSet(state.me.user_id, s.id); });
+      if (!stv.me) { stv.status = 'geen 7TV-account gevonden bij dit Twitch-account'; return; }
+      let style = u.style || {}, sets = u.emote_sets || [];
+      try {
+        const g = await fetch('https://7tv.io/v3/gql', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: STV_GQL, variables: { id: stv.me } }),
+        });
+        const gu = g.ok && ((await g.json()).data || {}).user;
+        if (gu) { style = Object.assign({}, style, gu.style || {}); if (gu.emote_sets) sets = gu.emote_sets; }
+      } catch {}
+      if (!style.paint && (style.paint_id || u.style && u.style.paint_id)) {
+        // reserve: volledige gebruiker opvragen, soms zit de paint daarin
+        try {
+          const f = await fetch('https://7tv.io/v3/users/' + stv.me);
+          if (f.ok) { const fu = await f.json(); if (fu.style) style = Object.assign({}, fu.style, style); }
+        } catch {}
+      }
+      if (style.paint) { stv.paints[style.paint.id] = style.paint; stv.userPaint[myId] = style.paint.id; }
+      if (style.badge) {
+        const h = style.badge.host || {};
+        stv.badges[style.badge.id] = { name: style.badge.name, tooltip: style.badge.tooltip, url: h.url ? 'https:' + h.url + '/1x.webp' : '' };
+        stv.userBadge[myId] = style.badge.id;
+      }
+      // persoonlijke emotes (vlag 4 = persoonlijke set)
+      await Promise.all(sets.filter((s) => (s.flags & 4) === 4).map((s) => loadPersonalSet(myId, s.id)));
+      restyleUser(myId);
       stvEvents.rooms.forEach((id) => sendPresence(id));
-    } catch {}
+      stv.status = 'gekoppeld als ' + (u.username || u.display_name || stv.me) + '; paint: ' + (style.paint ? style.paint.name || 'ja' : style.paint_id ? 'kon niet laden' : 'geen') +
+        ', badge: ' + (style.badge ? 'ja' : style.badge_id ? 'kon niet laden' : 'geen') + ', persoonlijke emotes: ' + Object.keys(stv.personal[myId] || {}).length;
+    } catch (e) { stv.status = 'ophalen mislukt (' + e.message + ')'; }
   }
   function sendPresence(roomId) {
     if (!stv.me) return;
