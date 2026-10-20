@@ -50,6 +50,8 @@
   .canvas { display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; align-items: flex-start; position: relative; }
   #zones.free .canvas { display: block; }
   #zones.free .canvas > .zone { position: absolute; }
+  #zones.free .canvas > .zone:not(.moving) { transition: left .15s ease, top .15s ease; }
+  body.resizing #zones.free .canvas > .zone.moving, #zones.free.settling .canvas > .zone { transition: none; }
   #zones.free .zone.moving { box-shadow: 0 10px 30px rgba(0,0,0,.6); opacity: .92; }
   .snapline { position: absolute; background: var(--accent); pointer-events: none; z-index: 9999; }
   #tidyBtn { white-space: nowrap; }
@@ -952,8 +954,32 @@
       }
       z.x = spot.x; z.y = spot.y; applyPos(z);
     });
-    if (allNew || fresh.length) saveTabs();
+    // oude indelingen met blokken over elkaar meteen rechtzetten
+    wrap.classList.add('settling');
+    const fixedAny = resolveOverlaps(null);
+    requestAnimationFrame(() => wrap.classList.remove('settling'));
+    if (allNew || fresh.length || fixedAny) saveTabs();
     fitCanvas();
+  }
+  // blokken mogen niet over elkaar: wat overlapt schuift naar beneden (het gesleepte of vergrote blok blijft staan)
+  function resolveOverlaps(fixed) {
+    const zs = curTab().zones.filter((z) => z.x != null && zoneEls[keyOf(z)] && zoneEls[keyOf(z)].root.isConnected);
+    const hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    const settled = fixed ? [fixed] : [];
+    let changed = false;
+    zs.filter((z) => z !== fixed).sort((a, b) => a.y - b.y || a.x - b.x).forEach((z) => {
+      let r = zoneRect(z), again = true;
+      while (again) {
+        again = false;
+        for (const o of settled) {
+          const q = zoneRect(o);
+          if (hit(r, q)) { z.y = q.y + q.h + GRID; r = zoneRect(z); again = true; changed = true; }
+        }
+      }
+      settled.push(z);
+      applyPos(z);
+    });
+    return changed;
   }
   function applyPos(z) {
     const el = zoneEls[keyOf(z)].root;
@@ -988,6 +1014,7 @@
     const lx = document.createElement('div'), ly = document.createElement('div');
     lx.className = ly.className = 'snapline';
     let moved = false, nx = ox, ny = oy;
+    const orig = curTab().zones.filter((o) => o !== z).map((o) => [o, o.x, o.y]);
     z.z = Math.max(0, ...curTab().zones.map((o) => o.z || 0)) + 1;
     root.style.zIndex = z.z;
     const snap = (v, cands) => { let best = null; cands.forEach((c) => { if (c[0] >= 0 && Math.abs(v - c[0]) < SNAP && (!best || Math.abs(v - c[0]) < Math.abs(v - best[0]))) best = c; }); return best; };
@@ -1003,6 +1030,10 @@
       nx = Math.max(0, snx ? snx[0] : Math.round(rx / GRID) * GRID);
       ny = Math.max(0, sny ? sny[0] : Math.round(ry / GRID) * GRID);
       root.style.left = nx + 'px'; root.style.top = ny + 'px';
+      // de rest schuift live opzij, en terug als je verder sleept
+      orig.forEach(([o, x, y]) => { o.x = x; o.y = y; });
+      z.x = nx; z.y = ny;
+      resolveOverlaps(z);
       // hulplijnen als hij ergens op uitlijnt
       lx.style.display = snx ? '' : 'none'; lx.style.left = (snx ? snx[1] : 0) + 'px'; lx.style.top = '0'; lx.style.width = '2px'; lx.style.height = canvas.scrollHeight + 'px';
       ly.style.display = sny ? '' : 'none'; ly.style.top = (sny ? sny[1] : 0) + 'px'; ly.style.left = '0'; ly.style.height = '2px'; ly.style.width = canvas.scrollWidth + 'px';
@@ -1156,6 +1187,7 @@
       const zz = zone.tabZone;
       if (!zz || !root.isConnected || !root.offsetWidth || isMobile() || root.closest('#mview')) return;
       zz.w = Math.round(root.offsetWidth); zz.h = Math.round(root.offsetHeight);
+      if (zz.x != null && freeMode() && root.parentNode && root.parentNode.classList.contains('canvas')) resolveOverlaps(zz);
       clearTimeout(zone.saveT); zone.saveT = setTimeout(() => { saveTabs(); fitCanvas(); }, 300);
     }).observe(root);
     return zone;
