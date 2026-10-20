@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#18181b">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <title>Modweergave</title>
 <style>
   :root {
@@ -213,7 +217,7 @@
     <h1>Modweergave</h1>
     <button id="addZoneBtn" title="Zone toevoegen in dit tabblad">+ Zone</button>
     <div id="shortcutBar"></div>
-    <button id="addScBtn" class="primary" title="Sneltoets toevoegen">+ Sneltoets</button>
+    <button id="addScBtn" class="primary" title="Sneltoetsen bewerken of verwijderen">✎ Sneltoetsen</button>
     <button id="viewBtn" hidden title="Weergave kiezen">▣ Weergave</button>
     <span id="selInfo"></span>
     <span id="account">niet ingelogd</span>
@@ -296,6 +300,18 @@
 </div>
 
 <!-- Instellingen -->
+<!-- Sneltoetsen beheren -->
+<div class="modal-bg" id="scListModal">
+  <div class="modal">
+    <h2>Sneltoetsen</h2>
+    <ul class="sc-list" id="scList"></ul>
+    <div class="row">
+      <button id="scNewBtn" class="primary" style="margin-right:auto">+ Nieuwe sneltoets</button>
+      <button data-close>Sluiten</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="setModal">
   <div class="modal">
     <h2>Instellingen</h2>
@@ -324,14 +340,17 @@
       <a class="btn" href="https://dev.twitch.tv/console/apps" target="_blank" rel="noopener" title="Je Twitch-apps beheren (Client ID, redirect)">Twitch-apps ↗</a>
     </div>
     <hr>
-    <label>Sneltoetsen</label>
-    <ul class="sc-list" id="scList"></ul>
-    <hr>
     <label>Back-up</label>
     <div class="row" style="justify-content:flex-start">
       <button id="exportBtn">Exporteren</button>
       <button id="importBtn">Importeren</button>
       <input type="file" id="importFile" accept=".json" hidden>
+    </div>
+    <hr>
+    <label>App</label>
+    <div class="hint" id="installHint"></div>
+    <div class="row" style="justify-content:flex-start">
+      <button class="primary" id="installBtn" hidden>Installeren als app</button>
     </div>
     <div class="row"><button data-close>Sluiten</button></div>
   </div>
@@ -1656,18 +1675,31 @@
       bar.appendChild(b);
     });
     const list = $('#scList');
-    list.innerHTML = state.shortcuts.length ? '' : '<li class="hint">Nog geen sneltoetsen. Voeg ze toe met + Sneltoets.</li>';
+    list.innerHTML = state.shortcuts.length ? '' : '<li class="hint">Nog geen sneltoetsen. Maak er een met + Nieuwe sneltoets.</li>';
     state.shortcuts.forEach((sc) => {
       const li = document.createElement('li');
-      li.innerHTML = '<span>' + esc(sc.name) + ' <small style="color:var(--muted)">' + TYPE_LABEL[sc.type] + '</small></span>' + (sc.key ? '<kbd>' + esc(sc.key) + '</kbd>' : '');
+      li.innerHTML = '<span>' + esc(sc.name) + ' <small style="color:var(--muted)">' + TYPE_LABEL[sc.type] +
+        (sc.type === 'msg' ? ': ' + esc(sc.text) : '') + '</small></span>' + (sc.key ? '<kbd>' + esc(sc.key) + '</kbd>' : '');
       const ed = document.createElement('button');
-      ed.className = 'icon'; ed.textContent = '✎'; ed.onclick = () => { closeModal('setModal'); openScModal(sc); };
-      li.appendChild(ed);
+      ed.className = 'icon'; ed.textContent = '✎'; ed.title = 'Bewerken';
+      ed.onclick = () => { closeModal('scListModal'); backToList = true; openScModal(sc); };
+      const del = document.createElement('button');
+      del.className = 'icon'; del.textContent = '🗑'; del.title = 'Verwijderen';
+      del.onclick = () => {
+        if (!confirm('Sneltoets "' + sc.name + '" verwijderen?')) return;
+        state.shortcuts = state.shortcuts.filter((s) => s !== sc);
+        saveShortcuts(); renderShortcuts();
+      };
+      li.appendChild(ed); li.appendChild(del);
       list.appendChild(li);
     });
   }
 
-  let editing = null, pendingKey = '', listening = false;
+  let editing = null, pendingKey = '', listening = false, backToList = false;
+  function closeScModal() {
+    closeModal('scModal');
+    if (backToList) { backToList = false; renderShortcuts(); openModal('scListModal'); }
+  }
   function openScModal(sc) {
     editing = sc || null;
     $('#scTitle').textContent = sc ? 'Sneltoets bewerken' : 'Sneltoets toevoegen';
@@ -1704,7 +1736,7 @@
     const sc = editing || { id: Date.now().toString(36) };
     Object.assign(sc, { name, type: t, text: $('#scText').value.trim(), dur: $('#scDur').value, reason: $('#scReason').value.trim(), key: pendingKey });
     if (!editing) state.shortcuts.push(sc);
-    saveShortcuts(); renderShortcuts(); closeModal('scModal');
+    saveShortcuts(); renderShortcuts(); closeScModal();
   }
 
   document.addEventListener('keydown', (e) => {
@@ -1758,23 +1790,25 @@
 
   // ---------- knoppen ----------
   document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => b.closest('.modal-bg').classList.remove('open')));
+  $('#scModal [data-close]').onclick = closeScModal;
   document.querySelectorAll('.modal-bg').forEach((m) => m.addEventListener('mousedown', (e) => { if (e.target === m) m.classList.remove('open'); }));
   $('#zoneKind').onchange = () => { $('#zoneNameWrap').hidden = $('#zoneKind').value === 'buttons'; };
   $('#addZoneBtn').onclick = () => { $('#zoneName').value = ''; $('#zoneKind').onchange(); openModal('zoneModal'); $('#zoneName').focus(); };
   $('#zoneSave').onclick = () => { addZone($('#zoneName').value, $('#zoneKind').value); closeModal('zoneModal'); };
   $('#zoneName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#zoneSave').click(); });
   $('#viewBtn').onclick = () => openViewPicker();
-  $('#addScBtn').onclick = () => openScModal(null);
+  $('#addScBtn').onclick = () => { renderShortcuts(); openModal('scListModal'); };
+  $('#scNewBtn').onclick = () => { closeModal('scListModal'); backToList = true; openScModal(null); };
   $('#scType').onchange = updateScFields;
   $('#scKey').onclick = () => { listening = !listening; updateKeyBtn(); };
   $('#scSave').onclick = saveSc;
   $('#scDelete').onclick = () => {
     state.shortcuts = state.shortcuts.filter((s) => s !== editing);
-    saveShortcuts(); renderShortcuts(); closeModal('scModal');
+    saveShortcuts(); renderShortcuts(); closeScModal();
   };
   $('#settingsBtn').onclick = () => {
     $('#ownApp').open = !DEFAULT_CLIENT_ID || !!state.clientId;
-    $('#howto').open = !state.me && !DEFAULT_CLIENT_ID; $('#clientId').value = state.clientId; renderShortcuts(); renderAccount(); openModal('setModal'); };
+    $('#howto').open = !state.me && !DEFAULT_CLIENT_ID; $('#clientId').value = state.clientId; renderAccount(); openModal('setModal'); };
   $('#loginBtn').onclick = login;
   $('#logoutBtn').onclick = logout;
 
@@ -1818,6 +1852,25 @@
     irc.connect(); loadTwitchEmotes(); loadMy7tv(); loadMyChans();
     Object.values(zoneEls).forEach((z) => { if (z.kind === 'users') loadUsers(z); });
   });
+  // Installeerbare app (PWA)
+  let installEvt = null;
+  const isApp = matchMedia('(display-mode: standalone), (display-mode: window-controls-overlay)').matches
+    || navigator.standalone || navigator.userAgent.includes('ModweergaveApp');
+  function renderInstall() {
+    $('#installBtn').hidden = isApp || !installEvt;
+    $('#installHint').textContent = isApp ? 'Je gebruikt de modweergave al als app.'
+      : installEvt ? 'Zet de modweergave als eigen app op je computer of telefoon, met een snelkoppeling en zonder browserbalk.'
+      : /iPhone|iPad/.test(navigator.userAgent) ? 'Installeren op iPhone of iPad: tik in Safari op Delen en kies Zet op beginscherm.'
+      : 'Installeren als app: gebruik in Chrome of Edge het installeer-icoon rechts in de adresbalk, of menu ⋮ → Installeren.';
+  }
+  addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; renderInstall(); });
+  addEventListener('appinstalled', () => { installEvt = null; renderInstall(); toast('Modweergave is geïnstalleerd als app.', 'ok'); });
+  $('#installBtn').onclick = async () => {
+    if (!installEvt) return;
+    installEvt.prompt(); await installEvt.userChoice; installEvt = null; renderInstall();
+  };
+  renderInstall();
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('/sw.js').catch(() => {});
 })();
 </script>
 </body>
