@@ -134,7 +134,9 @@
     border-radius: 6px 6px 0 0; color: var(--muted); cursor: pointer; white-space: nowrap; user-select: none; }
   .tab:hover { color: var(--text); }
   .tab.on { background: var(--bg); border-color: var(--line); color: var(--text); margin-bottom: -1px; }
-  .tab .tclose { padding: 4px 6px; font-size: 12px; }
+  .tab .tclose, .tab .tedit { padding: 4px 6px; font-size: 12px; }
+  .te-ch { font-weight: 600; margin: 14px 0 2px; }
+  #tabEditModal .dd-row { border-bottom: 1px solid var(--line); }
   .tadd { white-space: nowrap; min-height: 44px; padding: 0 14px; }
   .zone.stream { width: 640px; height: 400px; background: #000; }
   .zone.stream .player-slot { flex: 1; margin-bottom: 14px; }
@@ -484,6 +486,18 @@
   </div>
 </div>
 
+<!-- Tabblad bewerken -->
+<div class="modal-bg" id="tabEditModal">
+  <div class="modal">
+    <h2>Tabblad bewerken</h2>
+    <label for="teName">Naam</label>
+    <input id="teName" autocomplete="off" maxlength="30">
+    <div id="teList"></div>
+    <p class="hint">Een kanaal toevoegen doe je met <b>+ Zone</b>.</p>
+    <div class="row"><button class="primary" data-close>Klaar</button></div>
+  </div>
+</div>
+
 <!-- Modlog -->
 <div class="modal-bg" id="modlogModal">
   <div class="modal" style="max-width:560px">
@@ -813,9 +827,9 @@
       b.className = 'tab' + (t.id === state.tab ? ' on' : '');
       b.title = 'Klik om te openen, sleep om te verplaatsen, dubbelklik om de naam te wijzigen';
       b.dataset.id = t.id;
-      b.innerHTML = '<span class="tname"></span>' + (state.tabs.length > 1 ? '<button class="icon tclose" title="Tabblad sluiten">✕</button>' : '');
+      b.innerHTML = '<span class="tname"></span><button class="icon tedit" title="Tabblad bewerken: blokken aan of uit">✎</button>' + (state.tabs.length > 1 ? '<button class="icon tclose" title="Tabblad sluiten">✕</button>' : '');
       b.querySelector('.tname').textContent = t.name;
-      b.onclick = (e) => { if (Date.now() - (b.dragEnd || 0) < 400) return; if (e.target.closest('.tclose')) return; if (t.id === state.tab && isMobile()) openViewPicker(); else switchTab(t.id); };
+      b.onclick = (e) => { if (Date.now() - (b.dragEnd || 0) < 400) return; if (e.target.closest('.tclose')) return; if (e.target.closest('.tedit')) return openTabEdit(t.id); if (t.id === state.tab && isMobile()) openViewPicker(); else switchTab(t.id); };
       dragReorder(b, b, '#tabs > .tab', (target, after) => {
         const to = state.tabs.find((x) => x.id === target.dataset.id);
         state.tabs.splice(state.tabs.indexOf(t), 1);
@@ -834,6 +848,46 @@
     add.className = 'icon tadd'; add.textContent = '+ Tabblad'; add.title = 'Tabblad toevoegen';
     add.onclick = addTab;
     nav.appendChild(add);
+  }
+
+  // ✎ op een tabblad: naam en per blok een schakelaar
+  const TE_KINDS = [['stream', '📺 Stream'], ['chat', '💬 Chat'], ['users', '👥 Kijkers'], ['graph', '📈 Kijkersgrafiek'], ['modlog', '📋 Modlog']];
+  function openTabEdit(id) {
+    if (state.tab !== id) switchTab(id);
+    const t = curTab();
+    $('#teName').value = t.name;
+    $('#teName').oninput = () => { const n = $('#teName').value.trim(); if (n) { t.name = n.slice(0, 30); saveTabs(); renderTabs(); } };
+    drawTabEdit();
+    openModal('tabEditModal');
+  }
+  function drawTabEdit() {
+    const t = curTab(), list = $('#teList');
+    list.innerHTML = '';
+    const has = (kind, ch) => t.zones.some((z) => (z.kind || 'chat') === kind && (kind === 'buttons' || z.channel === ch));
+    const row = (label, on, fn) => {
+      const d = document.createElement('div');
+      d.className = 'dd-row';
+      d.innerHTML = '<span>' + label + '</span><i class="sw' + (on ? ' on' : '') + '"></i>';
+      d.onclick = () => { fn(!on); drawTabEdit(); };
+      list.appendChild(d);
+    };
+    const chans = [...new Set([t.channel, ...t.zones.filter((z) => z.kind !== 'buttons').map((z) => z.channel)].filter(Boolean))];
+    if (!chans.length) list.innerHTML = '<p class="hint">Dit tabblad heeft nog geen kanaal.</p>';
+    chans.forEach((ch) => {
+      list.insertAdjacentHTML('beforeend', '<div class="te-ch">' + esc(ch) + '</div>');
+      TE_KINDS.forEach(([kind, label]) => row(label, has(kind, ch), (on) => {
+        if (on) addZone(ch, kind);
+        else { const z = t.zones.find((x) => (x.kind || 'chat') === kind && x.channel === ch); if (z) removeZone(z); }
+      }));
+    });
+    if (chans.length) {
+      list.insertAdjacentHTML('beforeend', '<div class="te-ch">Algemeen</div>');
+      row('⚡ Sneltoetsen', has('buttons'), (on) => {
+        t.noButtons = !on;
+        if (on) addZone('knoppen', 'buttons');
+        else { const z = t.zones.find((x) => x.kind === 'buttons'); if (z) removeZone(z); else saveTabs(); }
+      });
+    }
   }
 
   function switchTab(id) {
@@ -879,7 +933,7 @@
     const zones = curTab().zones;
     // knoppenpaneel staat altijd in het tabblad, direct naast de eerste chat
     const fc = zones.findIndex((z) => !z.kind || z.kind === 'chat');
-    if (fc >= 0 && !zones.some((z) => z.kind === 'buttons')) {
+    if (fc >= 0 && !curTab().noButtons && !zones.some((z) => z.kind === 'buttons')) {
       zones.splice(fc + 1, 0, { kind: 'buttons', channel: 'knoppen' });
       saveTabs();
     }
