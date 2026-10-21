@@ -931,9 +931,12 @@
   }
 
   function addTab() {
-    const n = prompt('Naam van het nieuwe tabblad', 'Tabblad ' + (state.tabs.length + 1));
+    // één keer het kanaal invullen: tabblad krijgt die naam en meteen stream, chat en kijkers
+    const n = prompt('Welk Twitch-kanaal? (naam of link)\nLeeg laten voor een leeg tabblad.', '');
     if (n === null) return;
-    const t = { id: 't' + Date.now().toString(36), name: (n.trim() || 'Tabblad').slice(0, 30), zones: [] };
+    const ch = n.trim().toLowerCase().replace(/^.*twitch\.tv\//, '').replace(/[^a-z0-9_]/g, '');
+    if (ch) return openChannelTab(ch);
+    const t = { id: 't' + Date.now().toString(36), name: 'Tabblad ' + (state.tabs.length + 1), zones: [] };
     state.tabs.push(t); saveTabs();
     switchTab(t.id);
   }
