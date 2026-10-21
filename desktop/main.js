@@ -1,6 +1,6 @@
 // R5 ModHub desktop-app: een venster dat de live site laadt.
 // Updates van de site komen dus vanzelf mee; alleen deze schil hoeft zelden opnieuw.
-const { app, BrowserWindow, shell, Menu, ipcMain, net } = require('electron');
+const { app, BrowserWindow, shell, Menu, ipcMain, net, session } = require('electron');
 const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
@@ -111,6 +111,39 @@ function startLogin(authorizeUrl) {
 
 if (!app.requestSingleInstanceLock()) app.quit();
 
+// Chrome-UA zonder "Electron", zodat Twitch het inlogscherm en de speler normaal toont.
+// "ModweergaveApp" (alleen hoofdvenster) laat de site weten dat hij al als app draait.
+const chromeUA = (w) => w.webContents.getUserAgent().replace(/ (modweergave|r5-modhub|Electron)\/\S+/gi, '');
+
+// Speler: Turbo en abonnementen (geen reclame) werken alleen als de Twitch-speler zelf
+// bij twitch.tv is ingelogd. Dat is een andere login dan die voor chat en modacties.
+function playerLogin() {
+  const w = new BrowserWindow({
+    width: 480, height: 780, parent: win, title: 'Speler: inloggen bij Twitch',
+    autoHideMenuBar: true, backgroundColor: '#0e0e10',
+    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
+  });
+  w.webContents.setUserAgent(chromeUA(w));
+  w.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+  const onCookie = (_e, cookie, _cause, removed) => {
+    if (removed || cookie.name !== 'auth-token' || !/twitch\.tv$/.test(cookie.domain)) return;
+    session.defaultSession.cookies.flushStore();
+    if (!w.isDestroyed()) w.close();
+    if (win) win.webContents.reloadIgnoringCache();
+  };
+  session.defaultSession.cookies.on('changed', onCookie);
+  w.on('closed', () => session.defaultSession.cookies.removeListener('changed', onCookie));
+  w.loadURL('https://www.twitch.tv/login');
+}
+
+async function playerLogout() {
+  const jar = session.defaultSession.cookies;
+  const all = await jar.get({ domain: 'twitch.tv' });
+  await Promise.all(all.map((c) => jar.remove(`https://${c.domain.replace(/^\./, '')}${c.path}`, c.name)));
+  await jar.flushStore();
+  if (win) win.webContents.reloadIgnoringCache();
+}
+
 let win;
 function createWindow() {
   win = new BrowserWindow({
@@ -118,9 +151,7 @@ function createWindow() {
     title: 'R5 ModHub', backgroundColor: '#0e0e10', autoHideMenuBar: true,
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, preload: path.join(__dirname, 'preload.js') },
   });
-  // Chrome-UA zonder "Electron", zodat Twitch het inlogscherm en de speler normaal toont.
-  // "ModweergaveApp" laat de site weten dat hij al als app draait (geen installeerknop).
-  win.webContents.setUserAgent(win.webContents.getUserAgent().replace(/ (modweergave|Electron)\/\S+/gi, '') + ' ModweergaveApp');
+  win.webContents.setUserAgent(chromeUA(win) + ' ModweergaveApp');
 
   // Linkjes als Profiel, Modlogs en "open op Twitch" gaan naar de gewone browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -147,9 +178,14 @@ Menu.setApplicationMenu(Menu.buildFromTemplate([
   { label: 'Weergave', submenu: [
     { label: 'Herladen', accelerator: 'F5', click: () => win && win.loadURL(START_URL) },
     { role: 'reload', accelerator: 'CmdOrCtrl+R' },
+    { label: 'Herladen zonder cache', accelerator: 'CmdOrCtrl+F5', click: () => win && win.webContents.reloadIgnoringCache() },
     { role: 'togglefullscreen', accelerator: 'F11' },
     { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'resetZoom' },
     { role: 'toggleDevTools', accelerator: 'F12' },
+  ] },
+  { label: 'Speler', submenu: [
+    { label: 'Inloggen bij Twitch (Turbo, geen reclame)', click: playerLogin },
+    { label: 'Uitloggen bij Twitch', click: playerLogout },
   ] },
 ]));
 
