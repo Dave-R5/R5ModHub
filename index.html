@@ -45,6 +45,8 @@
   #selInfo { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
   #selInfo:empty { display: none; }
   #selInfo b { color: var(--text); }
+  #selInfo { display: inline-flex; align-items: center; gap: 6px; }
+  #selInfo .sel-x { padding: 2px 9px; min-height: 28px; font-size: 13px; touch-action: manipulation; }
 
   #zones { flex: 1; display: block; padding: 8px; overflow: auto; position: relative; z-index: 0; }
   .canvas { display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; align-items: flex-start; position: relative; }
@@ -492,7 +494,6 @@
     <div class="vm-opts">
       <button data-view="chat"><b>💬 Chat</b><small>Alleen de chat, het snelst om te modereren</small></button>
       <button data-view="video"><b>📺 Video + chat</b><small>Stream bovenaan, chat eronder</small></button>
-      <button data-view="mod"><b>🛡️ Modmodus</b><small>Chat met grote knoppen voor timeout, ban en verwijderen</small></button>
     </div>
     <p class="hint">Onderin wissel je altijd tussen Chat, Knoppen en Kijkers (je sneltoetsen en chatcommando's).</p>
     <div class="row"><button data-view="desktop">Vrije indeling (zones)</button></div>
@@ -1206,21 +1207,6 @@
       if (zone.stick) zone.msgs.scrollTop = zone.msgs.scrollHeight;
     }
     if (p === 'users') loadUsers(zone);
-
-    if (v === 'mod') {
-      const mb = document.createElement('div');
-      mb.className = 'mv-modbar';
-      mb.innerHTML = '<div class="mv-sel"></div>';
-      [['🗑 Weg', 'delete', 0], ['10 min', 'timeout', 600], ['1 uur', 'timeout', 3600], ['⛔ Ban', 'ban', 0]].forEach(([label, type, dur]) => {
-        const b = document.createElement('button');
-        b.textContent = label;
-        if (type === 'ban') b.className = 'danger';
-        b.onclick = () => runShortcut({ name: label, type, dur, reason: '' });
-        mb.appendChild(b);
-      });
-      mv.appendChild(mb);
-      updateModSel();
-    }
   }
   function updateModSel() {
     const el = document.querySelector('.mv-sel');
@@ -1305,6 +1291,8 @@
       if (e.target.closest('.rbtn')) { setReply(zone, e.target.closest('.msg')); return; }
       const el = e.target.closest('.msg');
       if (!el || !el.dataset.user) return;
+      // nog eens tikken op het geselecteerde bericht = selectie weg
+      if (state.sel && state.sel.el === el && !e.target.closest('.user')) { clearSel(); return; }
       select(z.channel, el);
       if (e.target.closest('.user')) openCard(z.channel, el, e.clientX, e.clientY);
     });
@@ -1360,7 +1348,7 @@
       el.innerHTML = '<span class="user">' + esc(b.textContent) + '</span>';
       state.sel && state.sel.el.classList.remove('sel');
       state.sel = { channel: z.channel, user: b.dataset.login, userId: b.dataset.id, msgId: '', el };
-      $('#selInfo').innerHTML = 'Geselecteerd: <b>' + esc(b.dataset.login) + '</b>';
+      $('#selInfo').innerHTML = 'Geselecteerd: <b>' + esc(b.dataset.login) + '</b> <button class="sel-x" title="Selectie weg (Esc)">✕</button>';
       openCard(z.channel, el, e.clientX, e.clientY);
     });
     loadUsers(zone);
@@ -2481,12 +2469,13 @@
   }
 
   // ---------- selectie ----------
+  $('#selInfo').addEventListener('click', (e) => { if (e.target.closest('.sel-x')) clearSel(); });
   function select(ch, el) {
     if (state.sel) state.sel.el.classList.remove('sel');
     state.sel = { channel: ch, user: el.dataset.user, userId: el.dataset.userId, msgId: el.dataset.id, el };
     el.classList.add('sel');
     setActive(ch);
-    $('#selInfo').innerHTML = 'Geselecteerd: <b>' + esc(el.dataset.user) + '</b> <kbd>Esc</kbd>';
+    $('#selInfo').innerHTML = 'Geselecteerd: <b>' + esc(el.dataset.user) + '</b> <button class="sel-x" title="Selectie weg (Esc)">✕</button>';
     updateModSel();
   }
   function clearSel() {
