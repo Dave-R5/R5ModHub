@@ -45,8 +45,9 @@
   #selInfo { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
   #selInfo:empty { display: none; }
   #selInfo b { color: var(--text); }
-  #selInfo { display: inline-flex; align-items: center; gap: 6px; }
-  #selInfo .sel-x { padding: 2px 9px; min-height: 28px; font-size: 13px; touch-action: manipulation; }
+  #selInfo { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  #selInfo b { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  #selInfo .sel-x { flex-shrink: 0;  padding: 2px 9px; min-height: 28px; font-size: 13px; touch-action: manipulation; }
 
   #zones { flex: 1; display: block; padding: 8px; overflow: auto; position: relative; z-index: 0; }
   .canvas { display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; align-items: flex-start; position: relative; }
@@ -217,7 +218,7 @@
     #tidyBtn { display: none; }
     #viewBtn, #modlogBtn { font-size: 0; } #viewBtn::before { content: '▣'; font-size: 16px; } #modlogBtn::before { content: '📋'; font-size: 16px; }
     header { gap: 6px; }
-    #selInfo { max-width: 40vw; }
+    #selInfo { max-width: 62vw; }
   }
   .player-off { margin: auto; padding: 16px; text-align: center; color: var(--muted); max-width: 320px; }
   #emptyHint { margin: auto; text-align: center; color: var(--muted); max-width: 420px; }
@@ -2469,7 +2470,7 @@
   }
 
   // ---------- selectie ----------
-  $('#selInfo').addEventListener('click', (e) => { if (e.target.closest('.sel-x')) clearSel(); });
+  $('#selInfo').addEventListener('click', () => clearSel());
   function select(ch, el) {
     if (state.sel) state.sel.el.classList.remove('sel');
     state.sel = { channel: ch, user: el.dataset.user, userId: el.dataset.userId, msgId: el.dataset.id, el };
