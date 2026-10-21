@@ -139,6 +139,8 @@
   #tabEditModal .dd-row { border-bottom: 1px solid var(--line); }
   .tadd { white-space: nowrap; min-height: 44px; padding: 0 14px; }
   .zone.stream { width: 640px; height: 400px; background: #000; }
+  .zone-head .uptime { color: #ff4f4f; font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .zone-head .uptime:empty { display: none; }
   .zone.stream .player-slot { flex: 1; margin-bottom: 14px; }
   #players { position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 5; }
   #players .pl { position: fixed; display: flex; background: #000; }
@@ -1483,8 +1485,25 @@
 
 
   function buildStream(z) {
-    const zone = makeShell(z, '▶ ' + z.channel, '');
+    const zone = makeShell(z, '▶ ' + z.channel, '<span class="uptime" title="Hoelang live"></span>');
     zone.dot.classList.add('live');
+    // hoelang live: begintijd elke minuut bij Twitch ophalen, de teller loopt elke seconde
+    const up = zone.root.querySelector('.uptime');
+    zone.poll = async () => {
+      if (z.channel === 'demo') zone.started = zone.started || Date.now() - 3725000;
+      else if (state.me) {
+        try { const st = (await helix('GET', 'streams', { user_login: z.channel })).data[0]; zone.started = st ? Date.parse(st.started_at) : 0; } catch {}
+      }
+      zone.dot.classList.toggle('live', !!zone.started || !state.me);
+    };
+    const tick = () => {
+      if (!zone.started) { up.textContent = ''; return; }
+      const sec = Math.max(0, Math.floor((Date.now() - zone.started) / 1000));
+      up.textContent = Math.floor(sec / 3600) + ':' + String(Math.floor(sec / 60) % 60).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
+    };
+    zone.poll();
+    zone.timer = setInterval(() => { if (zone.root.isConnected) zone.poll(); }, 60000);
+    zone.tickT = setInterval(tick, 1000);
     const host = location.hostname;
     if (host && z.channel !== 'demo') {
       // De speler staat los in een eigen laag en volgt alleen de plek van het blok. Een iframe dat
@@ -1732,7 +1751,7 @@
     detachZone(tab.zones, z);
     const k = keyOf(z);
     const stillUsed = state.tabs.some((t) => t.zones.some((x) => keyOf(x) === k));
-    if (!stillUsed && zoneEls[k]) { clearInterval(zoneEls[k].demoT); clearInterval(zoneEls[k].timer); if (zoneEls[k].player) zoneEls[k].player.remove(); delete zoneEls[k]; }
+    if (!stillUsed && zoneEls[k]) { clearInterval(zoneEls[k].demoT); clearInterval(zoneEls[k].timer); clearInterval(zoneEls[k].tickT); if (zoneEls[k].player) zoneEls[k].player.remove(); delete zoneEls[k]; }
     if (!z.kind || z.kind === 'chat') {
       if (state.sel && state.sel.channel === z.channel) clearSel();
       if (state.active === z.channel) state.active = null;
@@ -2927,7 +2946,7 @@
     if (Array.isArray(j.shortcuts)) { state.shortcuts = j.shortcuts; saveShortcuts(); }
     const tabs = Array.isArray(j.tabs) ? j.tabs : Array.isArray(j.zones) ? [{ id: 't1', name: 'Hoofd', zones: j.zones }] : null;
     if (tabs && tabs.length) {
-      Object.keys(zoneEls).forEach((c) => { clearInterval(zoneEls[c].demoT); clearInterval(zoneEls[c].timer); if (zoneEls[c].player) zoneEls[c].player.remove(); delete zoneEls[c]; });
+      Object.keys(zoneEls).forEach((c) => { clearInterval(zoneEls[c].demoT); clearInterval(zoneEls[c].timer); clearInterval(zoneEls[c].tickT); if (zoneEls[c].player) zoneEls[c].player.remove(); delete zoneEls[c]; });
       state.tabs = tabs; state.tab = tabs[0].id; saveTabs(); store.set('tab', state.tab);
     }
     if (j.clientId) { state.clientId = j.clientId; store.set('clientId', j.clientId); $('#clientId').value = j.clientId; }
