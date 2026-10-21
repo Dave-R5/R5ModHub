@@ -37,8 +37,13 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: desktop-v${{ steps.ver.outputs.v }}
         run: |
-          gh release create "desktop-v${{ steps.ver.outputs.v }}-test${{ github.run_number }}" dist/*.exe \
+          # Eén concept per versie: een eerder concept van dezelfde versie wordt vervangen.
+          gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            -q ".[] | select(.draft and .tag_name == \"$TAG\") | .id" |
+            while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$id"; done
+          gh release create "$TAG" dist/*.exe \
             --draft --target "$GITHUB_SHA" \
-            --title "R5 ModHub ${{ steps.ver.outputs.v }} (Windows, test ${{ github.run_number }})" \
-            --notes "Testversie. Download het .exe-bestand en voer het uit om de app te installeren."
+            --title "R5 ModHub ${{ steps.ver.outputs.v }}" \
+            --notes "Download het .exe-bestand en voer het uit om de app te installeren of bij te werken."
