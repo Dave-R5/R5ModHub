@@ -1650,7 +1650,8 @@
     const csv = '\ufeffDatum;Tijd;Kijkers;Raid\r\n' + rows.map((r) => fmt(r[0]) + ';' + r[1] + ';' + r[2]).join('\r\n') + '\r\n';
     const a2 = document.createElement('a');
     a2.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    a2.download = 'kijkers-' + ch + '-' + fmt(t0).split(';')[0] + '.csv';
+    const nu = new Date();
+    a2.download = 'kijkers-' + ch + '-' + nu.getFullYear() + '-' + d2(nu.getMonth() + 1) + '-' + d2(nu.getDate()) + '_' + d2(nu.getHours()) + '-' + d2(nu.getMinutes()) + '.csv';
     a2.click();
     setTimeout(() => URL.revokeObjectURL(a2.href), 1000);
   }
