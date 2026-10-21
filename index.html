@@ -3112,7 +3112,17 @@
     const pc = !/Android|iPhone|iPad|Mobile/.test(navigator.userAgent);
     $('#desktopBtn').hidden = !!window.r5app || !pc || (EXE_PRIVATE && !(state.me && state.me.login === 'dave_r5'));
   }
-  $('#desktopBtn').onclick = () => window.open('https://github.com/daveroosjen5-maker/modweergave/releases/latest', '_blank');
+  // direct de .exe van de nieuwste release downloaden; lukt dat niet, dan de releasepagina openen
+  $('#desktopBtn').onclick = async () => {
+    const page = 'https://github.com/daveroosjen5-maker/modweergave/releases/latest';
+    try {
+      const j = await (await fetch('https://api.github.com/repos/daveroosjen5-maker/modweergave/releases/latest')).json();
+      const exe = (j.assets || []).find((x) => /\.exe$/i.test(x.name));
+      if (!exe) throw 0;
+      location.href = exe.browser_download_url;
+      toast('Download van ' + exe.name + ' gestart.', 'ok');
+    } catch { window.open(page, '_blank'); }
+  };
   renderDesktopBtn();
   // Windows-app (.exe): zoeken naar updates. Alleen de .exe heeft window.r5app.
   if (window.r5app) {
