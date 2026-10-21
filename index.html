@@ -175,6 +175,11 @@
   .mychan .mc-state { font-size: 11px; color: var(--muted); }
   .mychan.live { border-color: var(--danger); }
   .mychan.live .mc-state { color: #ff6b6b; }
+  .mychan { position: relative; }
+  .mychan.extra { border-style: dashed; padding-right: 28px; }
+  .mychan .mc-x { position: absolute; top: 4px; right: 6px; font-size: 12px; color: var(--muted); padding: 2px 4px; }
+  .mychan .mc-x:hover { color: var(--danger); }
+  .mychan.add { border-style: dashed; color: var(--muted); }
   body.resizing iframe { pointer-events: none; }
   body.resizing { user-select: none; }
   .adv { cursor: pointer; color: var(--muted); font-size: 12px; margin-top: 10px; }
@@ -559,7 +564,7 @@
     set(k, v) { try { localStorage.setItem('modv.' + k, JSON.stringify(v)); } catch {} if (CLOUD_KEYS.includes(k)) cloudTouch(); },
     del(k) { try { localStorage.removeItem('modv.' + k); } catch {} },
   };
-  const CLOUD_KEYS = ['tabs', 'shortcuts', 'clientId', 'opts', 'words', 'notes', 'modlog'];
+  const CLOUD_KEYS = ['tabs', 'shortcuts', 'clientId', 'opts', 'words', 'notes', 'modlog', 'extraChans'];
   const cloudSync = { t: null };
   // opties; de hl-* zijn de kleuren in de chat die je via ⚙ Chat aan en uit zet
   const opts = Object.assign({ hlWords: true, hlMention: true, hlFirst: true, hlEvents: true, notifyLive: false, notifyMention: false, cloudAuto: false }, store.get('opts', {}));
@@ -1685,6 +1690,24 @@
 
   // ---------- mijn kanalen (waar je mod bent) ----------
   const myChans = { list: null, live: {}, err: '' };
+  // extra kanalen in Hoofd waar je geen mod bent (alleen login-namen)
+  let extraChans = store.get('extraChans', []);
+  const cleanCh = (n) => n.trim().toLowerCase().replace(/^.*twitch\.tv\//, '').replace(/[^a-z0-9_]/g, '');
+  function addExtraChan() {
+    const n = prompt('Welke streamer wil je in Hoofd zetten? (naam of link)', '');
+    if (n === null) return;
+    const ch = cleanCh(n);
+    if (!ch) return toast('Ongeldige kanaalnaam.', 'err');
+    if (extraChans.includes(ch) || (myChans.list || []).some((c) => c.broadcaster_login === ch)) return toast(ch + ' staat al in Hoofd.', 'err');
+    extraChans.push(ch); store.set('extraChans', extraChans);
+    renderZones();
+    loadMyChansLive().then(() => { if (state.tab === mainTabId()) renderZones(); });
+  }
+  function removeExtraChan(ch) {
+    if (!confirm(ch + ' uit Hoofd halen?')) return;
+    extraChans = extraChans.filter((x) => x !== ch); store.set('extraChans', extraChans);
+    renderZones();
+  }
   async function loadMyChans() {
     if (!state.me) return;
     try {
@@ -1715,6 +1738,11 @@
       myChans.list.slice(i, i + 100).forEach((c) => params.append('user_id', c.broadcaster_id));
       try { (await helix('GET', 'streams?' + params.toString())).data.forEach((st) => { live[st.user_id] = st; }); } catch {}
     }
+    for (let i = 0; i < extraChans.length; i += 100) {
+      const params = new URLSearchParams();
+      extraChans.slice(i, i + 100).forEach((l) => params.append('user_login', l));
+      try { (await helix('GET', 'streams?' + params.toString())).data.forEach((st) => { live[st.user_id] = st; }); } catch {}
+    }
     if (myChans.checked) Object.values(live).forEach((st) => {
       if (myChans.live[st.user_id]) return;
       const body = (st.game_name ? st.game_name + ' · ' : '') + (st.title || '');
@@ -1733,19 +1761,28 @@
   function myChansEl() {
     const box = document.createElement('div');
     box.className = 'mychans';
-    if (!state.me) { box.innerHTML = '<span class="hint">Log in (⚙) om hier knoppen te krijgen voor de kanalen waar je mod bent.</span>'; return box; }
-    if (myChans.err) { box.innerHTML = '<span class="hint">Kanalen laden mislukt: ' + esc(myChans.err) + '. Log opnieuw in via ⚙ na deze update.</span>'; return box; }
-    if (!myChans.list) { box.innerHTML = '<span class="hint">Kanalen waar je mod bent worden geladen…</span>'; return box; }
-    const sorted = [...myChans.list].sort((a, b) => (!!myChans.live[b.broadcaster_id] - !!myChans.live[a.broadcaster_id]) || a.broadcaster_login.localeCompare(b.broadcaster_login));
-    sorted.forEach((c) => {
-      const st = myChans.live[c.broadcaster_id];
+    const hint = (t) => box.insertAdjacentHTML('beforeend', '<span class="hint">' + t + '</span>');
+    const btn = (login, name, st, extra) => {
       const b = document.createElement('button');
-      b.className = 'mychan' + (st ? ' live' : '');
-      b.title = st ? (st.game_name || '') + ' · ' + (st.title || '') : 'Offline';
-      b.innerHTML = '<span class="mc-name">' + esc(c.broadcaster_name) + '</span><span class="mc-state">' + (st ? '● ' + st.viewer_count + ' kijkers' : 'offline') + '</span>';
-      b.onclick = () => openChannelTab(c.broadcaster_login, c.broadcaster_name);
+      b.className = 'mychan' + (st ? ' live' : '') + (extra ? ' extra' : '');
+      b.title = (st ? (st.game_name || '') + ' · ' + (st.title || '') : 'Offline') + (extra ? '\n(geen mod, ✕ haalt hem weg uit Hoofd)' : '');
+      b.innerHTML = '<span class="mc-name">' + esc(name) + '</span><span class="mc-state">' + (st ? '● ' + st.viewer_count + ' kijkers' : state.me ? 'offline' : '') + '</span>'
+        + (extra ? '<span class="mc-x" title="Uit Hoofd halen">✕</span>' : '');
+      b.onclick = (e) => { if (e.target.closest('.mc-x')) return removeExtraChan(login); openChannelTab(login, name); };
       box.appendChild(b);
-    });
+    };
+    const liveOf = (login) => Object.values(myChans.live).find((st) => st.user_login === login);
+    if (!state.me) hint('Log in (⚙) om hier knoppen te krijgen voor de kanalen waar je mod bent.');
+    else if (myChans.err) hint('Kanalen laden mislukt: ' + esc(myChans.err) + '. Log opnieuw in via ⚙ na deze update.');
+    else if (!myChans.list) hint('Kanalen waar je mod bent worden geladen…');
+    else [...myChans.list].sort((a, b) => (!!myChans.live[b.broadcaster_id] - !!myChans.live[a.broadcaster_id]) || a.broadcaster_login.localeCompare(b.broadcaster_login))
+      .forEach((c) => btn(c.broadcaster_login, c.broadcaster_name, myChans.live[c.broadcaster_id], false));
+    [...extraChans].sort((a, b) => (!!liveOf(b) - !!liveOf(a)) || a.localeCompare(b)).forEach((l) => { const st = liveOf(l); btn(l, st ? st.user_name : l, st, true); });
+    const add = document.createElement('button');
+    add.className = 'mychan add';
+    add.innerHTML = '<span class="mc-name">+ Streamer</span><span class="mc-state">waar je geen mod bent</span>';
+    add.onclick = addExtraChan;
+    box.appendChild(add);
     return box;
   }
 
@@ -2969,7 +3006,7 @@
   $('#logoutBtn').onclick = logout;
 
   function backupData() {
-    return { app: 'R5 ModHub', versie: 2, tabs: state.tabs, shortcuts: state.shortcuts, clientId: state.clientId, opts, words, notes, modlog };
+    return { app: 'R5 ModHub', versie: 2, tabs: state.tabs, shortcuts: state.shortcuts, clientId: state.clientId, opts, words, notes, modlog, extraChans };
   }
   function applyBackup(j) {
     if (Array.isArray(j.shortcuts)) { state.shortcuts = j.shortcuts; saveShortcuts(); }
@@ -2983,6 +3020,7 @@
     if (Array.isArray(j.words)) { words = j.words; store.set('words', words); $('#wordsBox').value = words.join('\n'); }
     if (j.notes && typeof j.notes === 'object') { notes = j.notes; store.set('notes', notes); }
     if (Array.isArray(j.modlog)) { modlog = j.modlog; store.set('modlog', modlog); }
+    if (Array.isArray(j.extraChans)) { extraChans = j.extraChans; store.set('extraChans', extraChans); }
     renderShortcuts(); renderTabs(); renderZones(); irc.reconnect();
   }
   $('#exportBtn').onclick = () => {
