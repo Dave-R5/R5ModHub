@@ -33,14 +33,16 @@ ipcMain.handle('r5:check-update', async (e) => {
 });
 ipcMain.handle('r5:open-download', (e) => { if (fromSite(e)) shell.openExternal(DOWNLOAD_URL); });
 
-// Inloggen gaat via je gewone browser: daar ben je meestal al bij Twitch ingelogd,
-// dus je hoeft alleen te autoriseren. Twitch stuurt daarna terug naar een tijdelijk
-// adres op deze pc, en de app geeft de token door aan de site (via #access_token=).
+// Eén login voor alles, in een klein venster van de app zelf:
+// 1. eerst inloggen bij twitch.tv (alleen de eerste keer); daarmee herkent de Twitch-speler
+//    je Turbo en abonnementen (geen reclame);
+// 2. daarna autoriseren voor chat en modacties. Twitch stuurt terug naar een tijdelijk
+//    adres op deze pc, en de app geeft de token door aan de site (via #access_token=).
 // Eigen Twitch-app "R5 ModHub Desktop", met omleidings-URL http://localhost:17563/
 const DESKTOP_CLIENT_ID = 'wujrrxa41txxiatvqedrg32zgl1kh5';
 const LOGIN_PORT = 17563;
 const LOGIN_REDIRECT = `http://localhost:${LOGIN_PORT}/`;
-let login = null; // { state, servers, timer }
+let login = null; // { state, servers, timer, win, onCookie }
 
 const page = (title, text) => `<!doctype html><meta charset="utf-8"><title>R5 ModHub</title>
 <body style="background:#0e0e10;color:#efeff1;font-family:sans-serif;padding:40px;text-align:center">
@@ -52,15 +54,18 @@ const CALLBACK_PAGE = page('Bezig met inloggen…', '') + `<script>
   fetch('/token', { method: 'POST', body: p.toString() }).then((r) => r.text()).then((msg) => {
     const ok = p.has('access_token') && msg === 'ok';
     document.getElementById('t').textContent = ok ? 'Ingelogd bij R5 ModHub' : 'Inloggen mislukt';
-    document.getElementById('m').textContent = ok ? 'Je kunt dit tabblad sluiten en teruggaan naar de app.' : msg;
+    document.getElementById('m').textContent = ok ? 'Dit venster sluit vanzelf.' : msg;
   }).catch(() => { document.getElementById('t').textContent = 'De app reageert niet meer. Probeer opnieuw in te loggen.'; });
 </script>`;
 
 function stopLogin() {
   if (!login) return;
-  clearTimeout(login.timer);
-  login.servers.forEach((s) => s.close());
+  const l = login;
   login = null;
+  clearTimeout(l.timer);
+  l.servers.forEach((s) => s.close());
+  if (l.onCookie) session.defaultSession.cookies.removeListener('changed', l.onCookie);
+  if (l.win && !l.win.isDestroyed()) l.win.close();
 }
 
 function handleLogin(req, res) {
@@ -75,9 +80,10 @@ function handleLogin(req, res) {
       const p = new URLSearchParams(body);
       const reply = (msg) => { res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end(msg); };
       if (!login || p.get('state') !== login.state) return reply('Deze inlogpoging is verlopen. Klik in de app opnieuw op Inloggen met Twitch.');
-      if (!p.get('access_token')) { stopLogin(); return reply(p.get('error_description') || 'Je hebt geen toestemming gegeven.'); }
+      if (!p.get('access_token')) { reply(p.get('error_description') || 'Je hebt geen toestemming gegeven.'); return setTimeout(stopLogin, 3000); }
       reply('ok');
-      stopLogin();
+      setTimeout(stopLogin, 800);
+      session.defaultSession.cookies.flushStore();
       if (win) {
         // Eerst leeg laden: alleen de #-hash wijzigen zou de site niet opnieuw laten starten.
         const token = p.get('access_token');
@@ -91,22 +97,44 @@ function handleLogin(req, res) {
   res.writeHead(404); res.end();
 }
 
-function startLogin(authorizeUrl) {
+const hasTwitchLogin = async () =>
+  (await session.defaultSession.cookies.get({ domain: 'twitch.tv', name: 'auth-token' })).length > 0;
+
+async function startLogin(authorizeUrl) {
   stopLogin();
   const state = crypto.randomBytes(16).toString('hex');
-  // Zowel IPv4 als IPv6, want "localhost" kan in de browser naar allebei wijzen. Nooit op het netwerk.
+  // Zowel IPv4 als IPv6, want "localhost" kan naar allebei wijzen. Nooit op het netwerk.
   const servers = ['127.0.0.1', '::1'].map((host) => {
     const s = http.createServer(handleLogin);
     s.on('error', () => {});
     s.listen(LOGIN_PORT, host);
     return s;
   });
-  login = { state, servers, timer: setTimeout(stopLogin, 10 * 60 * 1000) };
   const u = new URL(authorizeUrl);
   u.searchParams.set('client_id', DESKTOP_CLIENT_ID);
   u.searchParams.set('redirect_uri', LOGIN_REDIRECT);
   u.searchParams.set('state', state);
-  shell.openExternal(u.toString());
+
+  const w = new BrowserWindow({
+    width: 500, height: 800, parent: win, title: 'Inloggen bij Twitch',
+    autoHideMenuBar: true, backgroundColor: '#0e0e10',
+    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
+  });
+  w.webContents.setUserAgent(chromeUA(w));
+  w.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+  login = { state, servers, win: w, timer: setTimeout(stopLogin, 15 * 60 * 1000) };
+  w.on('closed', () => { if (login && login.win === w) stopLogin(); });
+
+  if (await hasTwitchLogin()) return w.loadURL(u.toString());
+  // Eerste keer: inloggen bij twitch.tv, daarna meteen door naar autoriseren.
+  login.onCookie = (_e, cookie, _cause, removed) => {
+    if (removed || cookie.name !== 'auth-token' || !/twitch\.tv$/.test(cookie.domain)) return;
+    session.defaultSession.cookies.removeListener('changed', login.onCookie);
+    login.onCookie = null;
+    if (!w.isDestroyed()) w.loadURL(u.toString());
+  };
+  session.defaultSession.cookies.on('changed', login.onCookie);
+  w.loadURL('https://www.twitch.tv/login');
 }
 
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -115,28 +143,9 @@ if (!app.requestSingleInstanceLock()) app.quit();
 // "ModweergaveApp" (alleen hoofdvenster) laat de site weten dat hij al als app draait.
 const chromeUA = (w) => w.webContents.getUserAgent().replace(/ (modweergave|r5-modhub|Electron)\/\S+/gi, '');
 
-// Speler: Turbo en abonnementen (geen reclame) werken alleen als de Twitch-speler zelf
-// bij twitch.tv is ingelogd. Dat is een andere login dan die voor chat en modacties.
-function playerLogin() {
-  const w = new BrowserWindow({
-    width: 480, height: 780, parent: win, title: 'Speler: inloggen bij Twitch',
-    autoHideMenuBar: true, backgroundColor: '#0e0e10',
-    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
-  });
-  w.webContents.setUserAgent(chromeUA(w));
-  w.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
-  const onCookie = (_e, cookie, _cause, removed) => {
-    if (removed || cookie.name !== 'auth-token' || !/twitch\.tv$/.test(cookie.domain)) return;
-    session.defaultSession.cookies.flushStore();
-    if (!w.isDestroyed()) w.close();
-    if (win) win.webContents.reloadIgnoringCache();
-  };
-  session.defaultSession.cookies.on('changed', onCookie);
-  w.on('closed', () => session.defaultSession.cookies.removeListener('changed', onCookie));
-  w.loadURL('https://www.twitch.tv/login');
-}
-
-async function playerLogout() {
+// Volledig uitloggen: de token van de site én de twitch.tv-login van de speler wissen.
+async function logoutAll() {
+  if (win) await win.webContents.executeJavaScript("localStorage.removeItem('modv.token')").catch(() => {});
   const jar = session.defaultSession.cookies;
   const all = await jar.get({ domain: 'twitch.tv' });
   await Promise.all(all.map((c) => jar.remove(`https://${c.domain.replace(/^\./, '')}${c.path}`, c.name)));
@@ -183,9 +192,8 @@ Menu.setApplicationMenu(Menu.buildFromTemplate([
     { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'resetZoom' },
     { role: 'toggleDevTools', accelerator: 'F12' },
   ] },
-  { label: 'Speler', submenu: [
-    { label: 'Inloggen bij Twitch (Turbo, geen reclame)', click: playerLogin },
-    { label: 'Uitloggen bij Twitch', click: playerLogout },
+  { label: 'Account', submenu: [
+    { label: 'Volledig uitloggen bij Twitch (ook de speler)', click: logoutAll },
   ] },
 ]));
 
