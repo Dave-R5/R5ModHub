@@ -33,6 +33,53 @@ ipcMain.handle('r5:check-update', async (e) => {
 });
 ipcMain.handle('r5:open-download', (e) => { if (fromSite(e)) shell.openExternal(DOWNLOAD_URL); });
 
+// Vervanging voor window.prompt(): een klein invoervenster bovenop de app.
+// De site wacht (synchroon) tot je op OK of Annuleren klikt, net als bij een gewone prompt.
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+ipcMain.on('r5:prompt', (e, message, value) => {
+  if (!fromSite(e) || !win) { e.returnValue = null; return; }
+  let answered = false;
+  const answer = (v) => { if (!answered) { answered = true; e.returnValue = v; } };
+  const w = new BrowserWindow({
+    width: 420, height: 190, parent: win, modal: true, resizable: false, minimizable: false, maximizable: false,
+    title: 'R5 ModHub', autoHideMenuBar: true, backgroundColor: '#18181b', show: false,
+    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, javascript: true },
+  });
+  w.setMenu(null);
+  // Het venster geeft zijn antwoord door via de titel ("__r5:" + JSON).
+  w.on('page-title-updated', (ev, title) => {
+    if (!title.startsWith('__r5:')) return;
+    ev.preventDefault();
+    answer(JSON.parse(title.slice(5)));
+    w.close();
+  });
+  w.on('closed', () => answer(null));
+  w.once('ready-to-show', () => w.show());
+  w.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(`<!doctype html><meta charset="utf-8">
+<title>R5 ModHub</title>
+<style>
+  body { margin: 0; padding: 18px; background: #18181b; color: #efeff1; font: 14px system-ui, sans-serif; }
+  label { display: block; margin-bottom: 8px; }
+  input { box-sizing: border-box; width: 100%; padding: 7px 9px; font: inherit; color: #efeff1; background: #0e0e10;
+    border: 1px solid #2e2e35; border-radius: 6px; outline: none; }
+  input:focus { border-color: #9147ff; }
+  .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  button { font: inherit; color: #efeff1; background: #1f1f23; border: 1px solid #2e2e35; border-radius: 6px; padding: 6px 14px; cursor: pointer; }
+  button.ok { background: #9147ff; border-color: #9147ff; }
+</style>
+<label for="v">${esc(message)}</label>
+<input id="v" value="${esc(value)}">
+<div class="row"><button id="no">Annuleren</button><button class="ok" id="ok">OK</button></div>
+<script>
+  const v = document.getElementById('v');
+  const done = (x) => { document.title = '__r5:' + JSON.stringify(x); };
+  document.getElementById('ok').onclick = () => done(v.value);
+  document.getElementById('no').onclick = () => done(null);
+  v.addEventListener('keydown', (e) => { if (e.key === 'Enter') done(v.value); if (e.key === 'Escape') done(null); });
+  v.focus(); v.select();
+</script>`));
+});
+
 // Eén login voor alles, in een klein venster van de app zelf:
 // 1. eerst inloggen bij twitch.tv (alleen de eerste keer); daarmee herkent de Twitch-speler
 //    je Turbo en abonnementen (geen reclame);
