@@ -1499,6 +1499,16 @@
   }
 
 
+  let twEmbed = null;
+  function loadTwitchEmbed() {
+    if (window.Twitch && Twitch.Player) return Promise.resolve();
+    return twEmbed || (twEmbed = new Promise((ok, fail) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://player.twitch.tv/js/embed/v1.js';
+      sc.onload = ok; sc.onerror = () => { twEmbed = null; fail(); };
+      document.head.appendChild(sc);
+    }));
+  }
   function buildStream(z) {
     const zone = makeShell(z, '▶ ' + z.channel, '<span class="uptime" title="Hoelang live"></span>');
     zone.dot.classList.add('live');
@@ -1524,17 +1534,25 @@
       // De speler staat los in een eigen laag en volgt alleen de plek van het blok. Een iframe dat
       // in de pagina verplaatst wordt, laadt opnieuw; zo blijft de stream (en het geluid) doorlopen
       // als je van tabblad wisselt of blokken verschuift.
-      const f = document.createElement('iframe');
-      f.allowFullscreen = true;
-      f.allow = 'autoplay; fullscreen';
-      f.src = 'https://player.twitch.tv/?' + new URLSearchParams({ channel: z.channel, parent: host, muted: 'true' });
       zone.slot = document.createElement('div');
       zone.slot.className = 'player-slot';
       zone.root.appendChild(zone.slot);
       zone.player = document.createElement('div');
       zone.player.className = 'pl';
-      zone.player.appendChild(f);
       $('#players').appendChild(zone.player);
+      // via de Twitch-speler-API, zodat hij met geluid op 40% start (de browser kan dat alsnog
+      // tegenhouden, bijvoorbeeld op de iPhone; dan begint Twitch zelf gedempt)
+      loadTwitchEmbed().then(() => {
+        const p = new Twitch.Player(zone.player, { channel: z.channel, parent: [host], width: '100%', height: '100%', muted: false, autoplay: true });
+        p.addEventListener(Twitch.Player.READY, () => { try { p.setVolume(0.4); p.setMuted(false); } catch {} });
+        zone.tw = p;
+      }).catch(() => {
+        const f = document.createElement('iframe');
+        f.allowFullscreen = true;
+        f.allow = 'autoplay; fullscreen';
+        f.src = 'https://player.twitch.tv/?' + new URLSearchParams({ channel: z.channel, parent: host, muted: 'true' });
+        zone.player.appendChild(f);
+      });
     } else {
       zone.root.insertAdjacentHTML('beforeend', '<div class="player-off">' + (z.channel === 'demo'
         ? 'Hier komt de stream van het kanaal.'
