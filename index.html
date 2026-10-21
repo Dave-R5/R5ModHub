@@ -41,7 +41,8 @@
     border-radius: 4px; padding: 0 5px; color: var(--muted); }
   .sc.user-action { border-color: #5a3d99; }
   #account { color: var(--muted); font-size: 12px; white-space: nowrap; }
-  #account.on { color: var(--ok); }
+  #account.on { color: var(--ok); font-size: 16px; }
+  #account { margin-left: auto; }
   #selInfo { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
   #selInfo:empty { display: none; }
   #selInfo b { color: var(--text); }
@@ -218,7 +219,8 @@
     #tidyBtn { display: none; }
     #viewBtn, #modlogBtn { font-size: 0; } #viewBtn::before { content: '▣'; font-size: 16px; } #modlogBtn::before { content: '📋'; font-size: 16px; }
     header { gap: 6px; }
-    #selInfo { max-width: 62vw; }
+    #selInfo { order: 10; flex-basis: 100%; max-width: none; }
+    #addScBtn { font-size: 0; } #addScBtn::before { content: '✎'; font-size: 16px; }
   }
   .player-off { margin: auto; padding: 16px; text-align: center; color: var(--muted); max-width: 320px; }
   #emptyHint { margin: auto; text-align: center; color: var(--muted); max-width: 420px; }
@@ -629,8 +631,8 @@
 
   function renderAccount() {
     const a = $('#account');
-    if (state.me) { a.textContent = '● ' + state.me.login; a.className = 'on'; }
-    else { a.textContent = 'niet ingelogd'; a.className = ''; }
+    if (state.me) { a.textContent = '●'; a.title = 'Ingelogd als ' + state.me.login; a.className = 'on'; }
+    else { a.textContent = 'niet ingelogd'; a.title = ''; a.className = ''; }
     $('#loginState').innerHTML = state.me
       ? 'Ingelogd als <b>' + esc(state.me.login) + '</b>. Modacties werken in kanalen waar je mod bent.'
       : 'Niet ingelogd: je kunt chats lezen, maar niets versturen of modereren.';
