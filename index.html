@@ -120,6 +120,11 @@
   .replybar { display: flex; gap: 6px; align-items: center; padding: 4px 8px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); background: var(--panel2); }
   .replybar span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .replybar[hidden] { display: none; }
+  .zone-foot { position: relative; }
+  .mention-dd { position: absolute; left: 6px; bottom: 100%; margin-bottom: 4px; z-index: 6; min-width: 180px; max-width: calc(100% - 12px);
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,.5); padding: 4px 0; }
+  .mention-dd .mdd-i { padding: 6px 10px; cursor: pointer; font-size: 14px; }
+  .mention-dd .mdd-i.on, .mention-dd .mdd-i:hover { background: var(--accent); color: #fff; }
   .zone-foot { padding: 6px; border-top: 1px solid var(--line); display: flex; gap: 4px; align-items: center; }
   .emo-btn { font-size: 18px; padding: 2px 8px; }
   #picker { position: fixed; z-index: 15; max-height: 50vh; display: flex; flex-direction: column; background: var(--panel);
@@ -1295,6 +1300,7 @@
     Object.assign(zone, { msgs, paused, input, stick: true, replyBar: root.querySelector('.replybar') });
     zone.replyBar.querySelector('button').onclick = () => setReply(zone, null);
     root.querySelector('.emo-btn').onclick = (e) => { e.stopPropagation(); togglePicker(z.channel, input); };
+    mentionBox(zone, root.querySelector('.zone-foot'), input);
 
     root.addEventListener('mousedown', () => setActive(z.channel));
     msgs.addEventListener('scroll', () => {
@@ -1317,6 +1323,49 @@
     });
     if (z.channel === 'demo') startDemo(zone); else loadHistory(zone);
     return zone;
+  }
+
+  // @naam aanvullen: lijst met namen uit deze chat (nieuwste eerst) en de deelnemerslijst
+  function mentionBox(zone, foot, input) {
+    const box = document.createElement('div');
+    box.className = 'mention-dd'; box.hidden = true;
+    foot.appendChild(box);
+    let items = [], idx = 0, start = -1;
+    const names = () => {
+      const seen = new Set(), out = [];
+      const add = (login, name) => { if (login && !seen.has(login)) { seen.add(login); out.push(name || login); } };
+      [...zone.msgs.querySelectorAll('.msg[data-user]')].reverse().forEach((m) => add(m.dataset.user, (m.querySelector('.user') || {}).textContent));
+      const uz = zoneEls['users:' + zone.channel];
+      ((uz && uz.users) || []).forEach((u) => add(u.user_login, u.user_name));
+      return out;
+    };
+    const close = () => { box.hidden = true; items = []; };
+    const pick = (n) => {
+      const v = input.value, c = input.selectionStart;
+      input.value = v.slice(0, start) + '@' + n + ' ' + v.slice(c);
+      const pos = start + n.length + 2;
+      input.setSelectionRange(pos, pos); input.focus(); close();
+    };
+    const draw = () => {
+      box.innerHTML = items.map((n, i) => '<div class="mdd-i' + (i === idx ? ' on' : '') + '" data-i="' + i + '">@' + esc(n) + '</div>').join('');
+      box.hidden = !items.length;
+    };
+    input.addEventListener('input', () => {
+      const c = input.selectionStart, m = input.value.slice(0, c).match(/(^|\s)@(\w*)$/);
+      if (!m) return close();
+      start = c - m[2].length - 1;
+      const q = m[2].toLowerCase(), all = names();
+      items = [...all.filter((n) => n.toLowerCase().startsWith(q)), ...all.filter((n) => !n.toLowerCase().startsWith(q) && n.toLowerCase().includes(q))].slice(0, 8);
+      idx = 0; draw();
+    });
+    input.addEventListener('keydown', (e) => {
+      if (box.hidden) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); idx = (idx + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length; draw(); }
+      else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); e.stopImmediatePropagation(); pick(items[idx]); }
+      else if (e.key === 'Escape') { e.stopImmediatePropagation(); close(); }
+    });
+    box.addEventListener('mousedown', (e) => { e.preventDefault(); const it = e.target.closest('.mdd-i'); if (it) pick(items[+it.dataset.i]); });
+    input.addEventListener('blur', () => setTimeout(close, 150));
   }
 
   // Twitch zelf bewaart geen chatgeschiedenis voor andere apps. De openbare dienst
