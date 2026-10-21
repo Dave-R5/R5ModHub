@@ -482,6 +482,7 @@
     <div class="hint" id="installHint"></div>
     <div class="row" style="justify-content:flex-start">
       <button class="primary" id="installBtn" hidden>Installeren als app</button>
+      <button id="desktopBtn" hidden title="Windows-app (.exe) downloaden">🖥 Installeer Desktop</button>
     </div>
     <div id="exeBox" hidden>
       <hr>
@@ -636,6 +637,7 @@
   }
 
   function renderAccount() {
+    if (typeof renderDesktopBtn === 'function') try { renderDesktopBtn(); } catch {}
     const a = $('#account');
     if (state.me) { a.textContent = '●'; a.title = 'Ingelogd als ' + state.me.login; a.className = 'on'; }
     else { a.textContent = 'niet ingelogd'; a.title = ''; a.className = ''; }
@@ -3103,6 +3105,15 @@
     installEvt.prompt(); await installEvt.userChoice; installEvt = null; renderInstall();
   };
   renderInstall();
+  // Knop naar de Windows-app (.exe). Zolang de .exe privé is (conceptrelease), alleen voor Dave;
+  // GitHub toont conceptreleases alleen aan de eigenaar. Niet in de .exe zelf en niet op telefoons.
+  const EXE_PRIVATE = true;
+  function renderDesktopBtn() {
+    const pc = !/Android|iPhone|iPad|Mobile/.test(navigator.userAgent);
+    $('#desktopBtn').hidden = !!window.r5app || !pc || (EXE_PRIVATE && !(state.me && state.me.login === 'dave_r5'));
+  }
+  $('#desktopBtn').onclick = () => window.open('https://github.com/daveroosjen5-maker/modweergave/releases', '_blank');
+  renderDesktopBtn();
   // Windows-app (.exe): zoeken naar updates. Alleen de .exe heeft window.r5app.
   if (window.r5app) {
     $('#exeBox').hidden = false;
