@@ -741,6 +741,7 @@
     switch (m.command) {
       case 'PING': irc.send('PONG :' + (m.params[0] || 'tmi.twitch.tv')); break;
       case 'JOIN': if (m.prefix.startsWith((state.me ? state.me.login : 'justinfan'))) setLive(true, ch); break;
+      case 'USERSTATE': if (ch) myBadges[ch] = m.tags.badges || ''; break;
       case 'ROOMSTATE': {
         setLive(true, ch);
         const r = room[ch] || (room[ch] = {});
@@ -1845,6 +1846,13 @@
   }
 
   // ---------- berichten ----------
+  // je eigen badges per kanaal: uit USERSTATE van Twitch, anders afgeleid uit je mod-kanalen
+  const myBadges = {};
+  function badgesFor(ch) {
+    if (ch in myBadges) return myBadges[ch];
+    if (state.me && ch === state.me.login) return 'broadcaster';
+    return (myChans.list || []).some((c) => c.broadcaster_login === ch) ? 'moderator' : '';
+  }
   function addMsg(ch, d) {
     const z = zoneEls[ch];
     if (!z) return;
@@ -2536,7 +2544,7 @@
     if (ch === 'demo') { addMsg('demo', { user: 'jij', name: state.me ? state.me.login : 'jij', text, badges: 'moderator', own: true, userId: state.me ? state.me.user_id : 'jij', ...ctx }); return; }
     if (!state.me) return toast('Log in (⚙) om berichten te versturen.', 'err');
     irc.send((reply ? '@reply-parent-msg-id=' + reply.id + ' ' : '') + 'PRIVMSG #' + ch + ' :' + text.replace(/[\r\n]+/g, ' '));
-    addMsg(ch, { user: state.me.login, name: state.me.login, text, badges: 'moderator', own: true, userId: state.me.user_id, ...ctx });
+    addMsg(ch, { user: state.me.login, name: state.me.login, text, badges: badgesFor(ch), own: true, userId: state.me.user_id, ...ctx });
   }
 
   // antwoorden op een bericht (zoals de reply-knop op Twitch)
