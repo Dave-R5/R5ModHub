@@ -1,8 +1,11 @@
 name: Windows-app bouwen
 
-# Bouwt de R5 ModHub-installer (.exe). De .exe komt alleen in een concept-release
-# (draft) en als workflow-bestand: concepten zijn niet openbaar, alleen
-# zichtbaar voor wie schrijfrechten op de repo heeft.
+# Bouwt de R5 ModHub-installer (.exe).
+# - Op een werkbranch: alleen als workflow-bestand (om te testen).
+# - Op main: een openbare release "R5 ModHub <versie>" met de .exe, .blockmap en
+#   latest.yml. De app leest latest.yml en werkt zichzelf daarmee bij.
+#   Elke nieuwe release vraagt dus een hoger versienummer in desktop/package.json;
+#   bestaat de versie al, dan wordt er niets gepubliceerd.
 on:
   push:
     branches: [main, claude/project-thread-2m915c]
@@ -31,19 +34,27 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: R5-ModHub-Setup
-          path: desktop/dist/*.exe
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.blockmap
+            desktop/dist/latest.yml
           retention-days: 30
-      - name: Concept-release maken
+      - name: Openbare release maken
+        if: github.ref == 'refs/heads/main'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: desktop-v${{ steps.ver.outputs.v }}
         run: |
-          # Eén concept per versie: een eerder concept van dezelfde versie wordt vervangen.
+          # Oude concept-releases (testversies van vóór de openbare releases) opruimen.
           gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
-            -q ".[] | select(.draft and .tag_name == \"$TAG\") | .id" |
+            -q '.[] | select(.draft and (.tag_name | startswith("desktop-v"))) | .id' |
             while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$id"; done
-          gh release create "$TAG" dist/*.exe \
-            --draft --target "$GITHUB_SHA" \
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Versie $TAG bestaat al; verhoog de versie in desktop/package.json voor een nieuwe release."
+            exit 0
+          fi
+          gh release create "$TAG" dist/*.exe dist/*.blockmap dist/latest.yml \
+            --target "$GITHUB_SHA" --latest \
             --title "R5 ModHub ${{ steps.ver.outputs.v }}" \
-            --notes "Download het .exe-bestand en voer het uit om de app te installeren of bij te werken."
+            --notes "Download R5-ModHub-Setup-${{ steps.ver.outputs.v }}.exe en voer het uit om de app te installeren. Heb je de app al (vanaf 1.4.0), dan werkt hij zichzelf bij."

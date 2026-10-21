@@ -1,6 +1,7 @@
 // R5 ModHub desktop-app: een venster dat de live site laadt.
-// Updates van de site komen dus vanzelf mee; alleen deze schil hoeft zelden opnieuw.
-const { app, BrowserWindow, shell, Menu, ipcMain, net, session } = require('electron');
+// Updates van de site komen dus vanzelf mee; de app zelf werkt zich bij via GitHub-releases.
+const { app, BrowserWindow, shell, Menu, ipcMain, session, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
@@ -8,30 +9,62 @@ const crypto = require('crypto');
 const START_URL = 'https://r5mod.daver5.nl/';
 const inApp = (url) => url.startsWith(START_URL);
 
-// Zoeken naar updates: de site toont dit in Instellingen (alleen in de .exe).
-// Het nieuwste versienummer staat in desktop/package.json op de site; de .exe zelf
-// staat als privé concept onder Releases, dus downloaden gaat via je browser.
-const VERSION_URL = START_URL + 'desktop/package.json';
-const DOWNLOAD_URL = 'https://github.com/daveroosjen5-maker/modweergave/releases';
+// Updates: de app werkt zichzelf bij vanaf de openbare GitHub-releases (electron-updater).
+// Bij het starten (en elke 4 uur) wordt gezocht; een nieuwe versie wordt op de achtergrond
+// gedownload en daarna gevraagd om te herstarten. Anders installeert hij bij afsluiten.
+// De site toont dit in Instellingen > Windows-app (checkUpdate / openDownload).
+const RELEASES_URL = 'https://github.com/daveroosjen5-maker/modweergave/releases';
 const newer = (a, b) => {
   const x = a.split('.').map(Number), y = b.split('.').map(Number);
   for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
   return false;
 };
 const fromSite = (e) => inApp(e.senderFrame?.url || '');
+
+const upd = { latest: null, ready: false, asked: false };
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.on('update-available', (i) => { upd.latest = i.version; });
+autoUpdater.on('update-not-available', (i) => { upd.latest = i.version; });
+autoUpdater.on('update-downloaded', (i) => {
+  upd.latest = i.version; upd.ready = true;
+  if (!upd.asked) { upd.asked = true; askRestart(); }
+});
+autoUpdater.on('error', () => {});
+
+async function askRestart() {
+  if (!win) return;
+  const { response } = await dialog.showMessageBox(win, {
+    type: 'info', buttons: ['Nu herstarten', 'Later'], defaultId: 0, cancelId: 1, title: 'R5 ModHub',
+    message: `Versie ${upd.latest} van R5 ModHub is klaar.`,
+    detail: 'Herstart nu om bij te werken. Kies je Later, dan wordt de update geïnstalleerd als je de app afsluit.',
+  });
+  if (response === 0) autoUpdater.quitAndInstall();
+}
+
+const checkForUpdates = () => (app.isPackaged ? autoUpdater.checkForUpdates() : Promise.resolve(null));
+
 ipcMain.handle('r5:check-update', async (e) => {
   if (!fromSite(e)) return null;
   const current = app.getVersion();
   try {
-    const r = await net.fetch(VERSION_URL + '?t=' + Date.now(), { cache: 'no-store' });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const latest = String((await r.json()).version || '');
-    return { current, latest, update: !!latest && newer(latest, current) };
+    const r = await checkForUpdates();
+    const latest = r?.updateInfo?.version || upd.latest || current;
+    return { current, latest, update: newer(latest, current) };
   } catch (err) {
     return { current, error: 'Kon niet zoeken naar updates (' + err.message + ').' };
   }
 });
-ipcMain.handle('r5:open-download', (e) => { if (fromSite(e)) shell.openExternal(DOWNLOAD_URL); });
+// "Downloaden" in Instellingen: is de update al binnen, dan meteen herstarten.
+ipcMain.handle('r5:open-download', async (e) => {
+  if (!fromSite(e)) return;
+  if (upd.ready) return askRestart();
+  if (!app.isPackaged) return shell.openExternal(RELEASES_URL);
+  await dialog.showMessageBox(win, {
+    type: 'info', buttons: ['OK'], title: 'R5 ModHub',
+    message: 'De update wordt gedownload.', detail: 'Zodra hij klaar is, vraagt de app of je wilt herstarten.',
+  });
+});
 
 // Vervanging voor window.prompt(): een klein invoervenster bovenop de app.
 // De site wacht (synchroon) tot je op OK of Annuleren klikt, net als bij een gewone prompt.
@@ -245,5 +278,9 @@ Menu.setApplicationMenu(Menu.buildFromTemplate([
 ]));
 
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  checkForUpdates().catch(() => {});
+  setInterval(() => checkForUpdates().catch(() => {}), 4 * 60 * 60 * 1000);
+});
 app.on('window-all-closed', () => app.quit());
