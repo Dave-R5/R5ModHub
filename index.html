@@ -3105,14 +3105,14 @@
     installEvt.prompt(); await installEvt.userChoice; installEvt = null; renderInstall();
   };
   renderInstall();
-  // Knop naar de Windows-app (.exe). Zolang de .exe privé is (conceptrelease), alleen voor Dave;
-  // GitHub toont conceptreleases alleen aan de eigenaar. Niet in de .exe zelf en niet op telefoons.
-  const EXE_PRIVATE = true;
+  // Knop naar de Windows-app (.exe). EXE_PRIVATE = true toont hem alleen aan Dave
+  // (conceptreleases ziet alleen de eigenaar). Niet in de .exe zelf en niet op telefoons.
+  const EXE_PRIVATE = false;
   function renderDesktopBtn() {
     const pc = !/Android|iPhone|iPad|Mobile/.test(navigator.userAgent);
     $('#desktopBtn').hidden = !!window.r5app || !pc || (EXE_PRIVATE && !(state.me && state.me.login === 'dave_r5'));
   }
-  $('#desktopBtn').onclick = () => window.open('https://github.com/daveroosjen5-maker/modweergave/releases', '_blank');
+  $('#desktopBtn').onclick = () => window.open('https://github.com/daveroosjen5-maker/modweergave/releases/latest', '_blank');
   renderDesktopBtn();
   // Windows-app (.exe): zoeken naar updates. Alleen de .exe heeft window.r5app.
   if (window.r5app) {
