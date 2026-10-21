@@ -833,6 +833,8 @@
   }
 
   function renderTabs() {
+    const ct = curTab(), tc = ct && tabChannel(ct);
+    document.title = (tc ? (ct.name || tc) + ' · ' : '') + 'R5 ModHub';
     const nav = $('#tabs');
     nav.innerHTML = '';
     state.tabs.forEach((t) => {
@@ -910,6 +912,18 @@
     state.mview = null;
     renderTabs(); renderZones();
     if (isMobile() && tabChannel(curTab())) openViewPicker();
+  }
+
+  // een tabblad met een standaardnaam heet meteen zoals het kanaal op Twitch
+  function nameTabAfter(t, ch, kind) {
+    if (kind === 'buttons' || !/^(Tabblad( \d+)?)?$/.test(t.name.trim())) return;
+    t.name = ch;
+    if (!t.channel) t.channel = ch;
+    renderTabs();
+    if (state.me && ch !== 'demo') helix('GET', 'users', { login: ch }).then((j) => {
+      const u = j.data[0];
+      if (u && t.name === ch) { t.name = u.display_name || ch; saveTabs(); renderTabs(); }
+    }).catch(() => {});
   }
 
   function addTab() {
@@ -1601,8 +1615,9 @@
 
   // ---------- grote kijkersgrafiek ----------
   function buildGraphZone(z) {
-    const zone = makeShell(z, '📈 Kijkers tijdens de stream', '<span class="gnow"></span>');
+    const zone = makeShell(z, '📈 Kijkers tijdens de stream', '<span class="gnow"></span><button class="icon" data-act="csv" title="Exporteren naar Excel (CSV)">⤓</button>');
     zone.root.insertAdjacentHTML('beforeend', '<div class="gbox"></div>');
+    zone.root.querySelector('[data-act=csv]').onclick = () => exportViewers(z.channel);
     zone.box = zone.root.querySelector('.gbox');
     zone.now = zone.root.querySelector('.gnow');
     zone.redraw = () => drawBigGraph(zone);
@@ -1621,6 +1636,23 @@
     zone.poll();
     zone.timer = setInterval(() => { if (zone.root.isConnected) zone.poll(); }, 60000);
     return zone;
+  }
+  // kijkers van de huidige stream als CSV (puntkomma's, zodat Excel het in kolommen zet)
+  function exportViewers(ch) {
+    const a = streamSamples(ch);
+    if (!a.length) return toast('Nog geen kijkersgegevens voor ' + ch + '.', 'err');
+    const t0 = a[0][0];
+    const rows = a.map((x) => [x[0], x[1], '']);
+    (raidMarks[ch] || []).filter((r) => r[0] >= t0).forEach((r) => rows.push([r[0], '', 'raid +' + r[1]]));
+    rows.sort((x, y) => x[0] - y[0]);
+    const d2 = (n) => String(n).padStart(2, '0');
+    const fmt = (t) => { const d = new Date(t); return d.getFullYear() + '-' + d2(d.getMonth() + 1) + '-' + d2(d.getDate()) + ';' + d2(d.getHours()) + ':' + d2(d.getMinutes()); };
+    const csv = '\ufeffDatum;Tijd;Kijkers;Raid\r\n' + rows.map((r) => fmt(r[0]) + ';' + r[1] + ';' + r[2]).join('\r\n') + '\r\n';
+    const a2 = document.createElement('a');
+    a2.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a2.download = 'kijkers-' + ch + '-' + fmt(t0).split(';')[0] + '.csv';
+    a2.click();
+    setTimeout(() => URL.revokeObjectURL(a2.href), 1000);
   }
   function drawBigGraph(zone) {
     const ch = zone.channel, a = streamSamples(ch);
@@ -1742,6 +1774,7 @@
     const z = { channel: ch, kind };
     if (zones.some((x) => keyOf(x) === keyOf(z))) return toast(ch + ' staat al in dit tabblad.', 'err');
     zones.push(z);
+    nameTabAfter(curTab(), ch, kind);
     saveTabs(); renderZones(); syncChannels();
     if (kind === 'chat') setActive(ch);
   }
