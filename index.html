@@ -468,6 +468,15 @@
     <div class="row" style="justify-content:flex-start">
       <button class="primary" id="installBtn" hidden>Installeren als app</button>
     </div>
+    <div id="exeBox" hidden>
+      <hr>
+      <label>Windows-app</label>
+      <div class="hint" id="exeState"></div>
+      <div class="row" style="justify-content:flex-start">
+        <button id="exeCheck">Zoeken naar updates</button>
+        <button class="primary" id="exeDownload" hidden>Downloaden</button>
+      </div>
+    </div>
     <div class="row"><button data-close>Sluiten</button></div>
   </div>
 </div>
@@ -2956,6 +2965,22 @@
     installEvt.prompt(); await installEvt.userChoice; installEvt = null; renderInstall();
   };
   renderInstall();
+  // Windows-app (.exe): zoeken naar updates. Alleen de .exe heeft window.r5app.
+  if (window.r5app) {
+    $('#exeBox').hidden = false;
+    const exeCheck = async (quiet) => {
+      $('#exeState').textContent = 'Bezig met zoeken naar updates…';
+      const r = await window.r5app.checkUpdate();
+      if (!r) return;
+      $('#exeDownload').hidden = !r.update;
+      $('#exeState').textContent = 'Versie ' + r.current + '. ' + (r.error ? r.error
+        : r.update ? 'Nieuwe versie ' + r.latest + ' is beschikbaar.' : 'Je hebt de nieuwste versie.');
+      if (r.update && quiet) toast('Nieuwe versie ' + r.latest + ' van de Windows-app beschikbaar, zie ⚙ Instellingen.', 'ok');
+    };
+    $('#exeCheck').onclick = () => exeCheck(false);
+    $('#exeDownload').onclick = () => window.r5app.openDownload();
+    exeCheck(true);
+  }
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('/sw.js').catch(() => {});
 })();
 </script>
