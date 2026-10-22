@@ -207,13 +207,31 @@ async function startLogin(authorizeUrl) {
 
   if (await hasTwitchLogin()) return w.loadURL(u.toString());
   // Eerste keer: inloggen bij twitch.tv, daarna meteen door naar autoriseren.
+  // Twitch stuurt na het inloggen soms gewoon naar de startpagina; daarom drie signalen:
+  // het auth-token-cookie, een pagina buiten het inlogscherm, of een korte controle elke seconde.
+  let done = false;
+  const goAuthorize = () => {
+    if (done || w.isDestroyed()) return;
+    done = true;
+    if (login && login.onCookie) session.defaultSession.cookies.removeListener('changed', login.onCookie);
+    if (login) login.onCookie = null;
+    clearInterval(poll);
+    w.loadURL(u.toString());
+  };
   login.onCookie = (_e, cookie, _cause, removed) => {
-    if (removed || cookie.name !== 'auth-token' || !/twitch\.tv$/.test(cookie.domain)) return;
-    session.defaultSession.cookies.removeListener('changed', login.onCookie);
-    login.onCookie = null;
-    if (!w.isDestroyed()) w.loadURL(u.toString());
+    if (!removed && cookie.name === 'auth-token' && /twitch\.tv$/.test(cookie.domain)) goAuthorize();
   };
   session.defaultSession.cookies.on('changed', login.onCookie);
+  const poll = setInterval(() => { hasTwitchLogin().then((ok) => ok && goAuthorize()).catch(() => {}); }, 1000);
+  w.on('closed', () => clearInterval(poll));
+  const onNav = (_e, url) => {
+    let h;
+    try { h = new URL(url); } catch { return; }
+    if (/(^|\.)twitch\.tv$/.test(h.hostname) && h.hostname !== 'id.twitch.tv' && h.hostname !== 'passport.twitch.tv'
+        && !/^\/(login|signup|passport|two_factor|verify)/.test(h.pathname)) goAuthorize();
+  };
+  w.webContents.on('did-navigate', onNav);
+  w.webContents.on('did-navigate-in-page', onNav);
   w.loadURL('https://www.twitch.tv/login');
 }
 
