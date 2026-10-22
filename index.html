@@ -1319,8 +1319,30 @@
     });
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && zone.replyTo) { e.stopPropagation(); setReply(zone, null); return; }
-      if (e.key === 'Enter' && input.value.trim()) { sendChat(z.channel, input.value.trim(), zone.replyTo); input.value = ''; setReply(zone, null); }
+      if (e.key === 'Enter' && input.value.trim()) {
+        const t = input.value.trim();
+        sendChat(z.channel, t, zone.replyTo); input.value = ''; setReply(zone, null);
+        if (zone.sent[zone.sent.length - 1] !== t) zone.sent.push(t);
+        if (zone.sent.length > 50) zone.sent.shift();
+        zone.hi = -1;
+        return;
+      }
+      // ↑ / ↓: eerder verstuurde berichten terughalen (om een typfout te verbeteren)
+      if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && zone.sent.length) {
+        if (e.key === 'ArrowUp') {
+          if (zone.hi === -1) { zone.draft = input.value; zone.hi = zone.sent.length; }
+          if (zone.hi > 0) zone.hi--;
+        } else {
+          if (zone.hi === -1) return;
+          zone.hi++;
+          if (zone.hi >= zone.sent.length) { zone.hi = -1; input.value = zone.draft || ''; e.preventDefault(); return; }
+        }
+        e.preventDefault();
+        input.value = zone.sent[zone.hi];
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
     });
+    zone.sent = []; zone.hi = -1;
     if (z.channel === 'demo') startDemo(zone); else loadHistory(zone);
     return zone;
   }
