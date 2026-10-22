@@ -667,6 +667,7 @@
           <summary>Nieuw sinds 1.5.0 <small>22 okt 2026</small></summary>
           <ul>
             <li><b>Emotekiezer</b>: je Twitch-emotes staan per kanaal, met het kanaal waarin je chat bovenaan. Emotes van hetzelfde kanaal staan nu in één groep.</li>
+            <li><b>Tabblad sluiten</b>: de stream in dat tabblad stopt nu ook echt, je hoort hem niet meer op de achtergrond.</li>
             <li><b>Kijkersgrafiek</b>: een gele streep met de gamenaam bij elke gamewissel, en onder de grafiek per game hoeveel kijkers erbij kwamen of weggingen.</li>
             <li><b>Probeer de demo</b> opent nu de volledige demo met stream, chat, knoppen, modlog en kijkers.</li>
           </ul>
@@ -1190,6 +1191,7 @@
     const t = state.tabs.find((x) => x.id === id);
     if (t.zones.length && !confirm('Tabblad "' + t.name + '" met ' + t.zones.length + ' zone(s) sluiten?')) return;
     state.tabs = state.tabs.filter((x) => x !== t);
+    t.zones.forEach((z) => dropZoneEl(keyOf(z)));
     saveTabs();
     if (state.tab === id) { state.tab = null; switchTab(state.tabs[0].id); } else renderTabs();
     syncChannels();
@@ -2175,12 +2177,19 @@
     if (kind === 'chat') setActive(ch);
   }
 
+  // blok opruimen als geen enkel tabblad hem nog gebruikt (de speler staat in een eigen laag en speelt anders door)
+  function dropZoneEl(k) {
+    const ze = zoneEls[k];
+    if (!ze || state.tabs.some((t) => t.zones.some((x) => keyOf(x) === k))) return;
+    clearInterval(ze.demoT); clearInterval(ze.timer); clearInterval(ze.tickT);
+    if (ze.player) ze.player.remove();
+    delete zoneEls[k];
+  }
+
   function removeZone(z) {
     const tab = curTab();
     detachZone(tab.zones, z);
-    const k = keyOf(z);
-    const stillUsed = state.tabs.some((t) => t.zones.some((x) => keyOf(x) === k));
-    if (!stillUsed && zoneEls[k]) { clearInterval(zoneEls[k].demoT); clearInterval(zoneEls[k].timer); clearInterval(zoneEls[k].tickT); if (zoneEls[k].player) zoneEls[k].player.remove(); delete zoneEls[k]; }
+    dropZoneEl(keyOf(z));
     if (!z.kind || z.kind === 'chat') {
       if (state.sel && state.sel.channel === z.channel) clearSel();
       if (state.active === z.channel) state.active = null;
