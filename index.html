@@ -349,6 +349,14 @@
   .help-sec li { margin: 5px 0; }
   .help-sec li b { color: #cdb8ff; font-weight: 600; }
   .help-sec a { color: var(--accent); }
+  .cl { padding: 6px 8px 8px; }
+  .cl-ver { border: 1px solid var(--line); border-radius: 6px; margin: 4px 0; }
+  .cl-ver summary { cursor: pointer; padding: 6px 10px; font-weight: 600; font-size: 13px; display: flex; gap: 8px; }
+  .cl-ver summary small { color: var(--muted); font-weight: 400; margin-left: auto; }
+  .cl-ver ul { margin: 2px 0 8px; padding: 0 12px 0 30px; }
+  .help-sec .cl-ver summary { border-bottom: 0; }
+  .help-sec .cl-ver summary::after { transform: none; }
+  .help-sec .cl-ver[open] > summary::after { transform: rotate(180deg); }
   .help-form { padding: 10px 14px 12px; }
   .help-form label { margin-top: 8px; }
   .help-form .hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
@@ -647,6 +655,72 @@
         <li>Kies <b>Chat</b> of <b>Video + chat</b> als je een tabblad opent.</li>
         <li>Wissel onderin tussen <b>Chat</b>, <b>Knoppen</b> en <b>Kijkers</b>.</li>
       </ul>
+    </details>
+    <details class="help-sec">
+      <summary><span class="hi">📜</span>Changelog<small>wat is er veranderd</small></summary>
+      <div class="cl">
+        <details class="cl-ver" open>
+          <summary>Nieuw sinds 1.4.5 <small>22 okt 2026</small></summary>
+          <ul>
+            <li><b>Raids</b>: raidt een kanaal dat je open hebt, dan ga je na 10 seconden automatisch mee in een nieuw tabblad, tenzij je op <b>Verlaten</b> drukt.</li>
+            <li><b>Changelog</b> in dit hulpmenu.</li>
+          </ul>
+        </details>
+        <details class="cl-ver">
+          <summary>Versie 1.4.5 <small>22 okt 2026</small></summary>
+          <ul>
+            <li><b>Polls en kanaalpunten</b>: in je eigen kanaal live polls en inwisselingen in de chat; overal een 🎁-label bij berichten met kanaalpunten.</li>
+            <li><b>Hulpmenu ❓</b> met uitleg per onderdeel, en een formulier voor vragen of suggesties.</li>
+            <li><b>Welkomstblok</b> in Hoofd als je nog niet bent ingelogd.</li>
+            <li>Inloggen gaat altijd via de ingebouwde Twitch-koppeling; je eigen Twitch-app is niet meer nodig.</li>
+          </ul>
+        </details>
+        <details class="cl-ver">
+          <summary>Versie 1.4 <small>21 okt 2026</small></summary>
+          <ul>
+            <li><b>Windows-app openbaar</b>, werkt zichzelf bij. Knoppen <b>Installeer Web-App</b> en <b>Installeer App</b> (directe download) in ⚙.</li>
+            <li><b>+ Tabblad</b> vraagt het kanaal en opent meteen stream, chat, knoppen, modlog en kijkers.</li>
+            <li><b>+ Streamer</b> in Hoofd voor kanalen waar je geen mod bent, met live-status.</li>
+            <li>Stream start met geluid op 40%. Naast de live-tijd staat het aantal kijkers.</li>
+            <li>Chat: <b>@naam</b> kiezen uit een lijst, en met <b>↑</b> eerdere berichten terughalen.</li>
+            <li>Je eigen berichten tonen je echte badges; geen M meer waar je geen mod bent.</li>
+          </ul>
+        </details>
+        <details class="cl-ver">
+          <summary>Versie 1.3 <small>21 okt 2026</small></summary>
+          <ul>
+            <li>Rode teller met hoelang een kanaal live is.</li>
+            <li><b>Kijkers exporteren</b> als CSV, met datum en tijd in de bestandsnaam.</li>
+            <li>Tabblad en venstertitel krijgen de kanaalnaam.</li>
+            <li>Mobiel: selectie weghalen met ✕ of opnieuw tikken, modknoppen onderin weg, bolletje en ⚙ rechtsboven.</li>
+            <li>Windows-app: één login voor chat, modacties en speler.</li>
+          </ul>
+        </details>
+        <details class="cl-ver">
+          <summary>Versie 1.2 <small>21 okt 2026</small></summary>
+          <ul>
+            <li>Nieuw adres: <b>r5mod.daver5.nl</b>.</li>
+            <li>Gebruikerskaartje vrij versleepbaar over alles heen.</li>
+            <li>Windows-app: inloggen via je browser, zoeken naar updates, speler ingelogd bij Twitch.</li>
+          </ul>
+        </details>
+        <details class="cl-ver">
+          <summary>Versie 1.1 <small>20 okt 2026</small></summary>
+          <ul>
+            <li>Chat-dropdown (Shield, alleen emotes, alleen volgers), woordfilter, markeringen, notities, meldingen, BTTV/FFZ-emotes en variabelen in sneltoetsen.</li>
+            <li><b>Live modlog</b> van alle mods, kijkersgrafiek, 🔔-meldingen en cloud-back-up.</li>
+            <li>Chatgeschiedenis bij het openen, antwoorden op berichten.</li>
+            <li>Blokken vrij plaatsen zonder overlap, stream speelt door bij wisselen van tabblad, ✎ per tabblad.</li>
+          </ul>
+        </details>
+        <details class="cl-ver">
+          <summary>Versie 1.0 <small>20 okt 2026</small></summary>
+          <ul>
+            <li>Eerste versie: tabbladen met chat, stream, kijkers en knoppen, sneltoetsen, gebruikerskaartje en 7TV.</li>
+            <li>Knoppen naar kanalen waar je mod bent, inloggen met Twitch, weergave voor mobiel en installeren als app.</li>
+          </ul>
+        </details>
+      </div>
     </details>
     <details class="help-sec">
       <summary><span class="hi">✉</span>Vragen of suggesties<small>stuur een bericht</small></summary>
