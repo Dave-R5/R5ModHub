@@ -189,15 +189,11 @@
   .mychan.add { border-style: dashed; color: var(--muted); }
   body.resizing iframe { pointer-events: none; }
   body.resizing { user-select: none; }
-  .adv { cursor: pointer; color: var(--muted); font-size: 12px; margin-top: 10px; }
   .howto { margin-top: 8px; font-size: 13px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
   .howto summary { cursor: pointer; color: var(--accent); font-weight: 600; }
   .howto ol { margin: 8px 0 4px; padding-left: 20px; }
   .howto li { margin: 4px 0; }
   .howto a { color: var(--accent); }
-  .copyline { display: inline-flex; gap: 6px; align-items: center; margin-top: 4px; flex-wrap: wrap; }
-  .copyline code { background: var(--panel2); padding: 2px 6px; border-radius: 4px; }
-  .copyline button { padding: 2px 8px; font-size: 12px; }
   #mview { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   #mview[hidden] { display: none; }
   #zones[hidden] { display: none; }
@@ -452,24 +448,6 @@
   <div class="modal">
     <h2>Instellingen</h2>
     <div id="loginState" class="hint"></div>
-    <details id="ownApp">
-    <summary class="adv">Eigen Twitch-app gebruiken (geavanceerd)</summary>
-    <label for="clientId">Twitch Client ID</label>
-    <input id="clientId" autocomplete="off" placeholder="van dev.twitch.tv/console/apps">
-    <details class="howto" id="howto">
-      <summary>Hoe maak ik een Twitch-app voor de Client ID?</summary>
-      <ol>
-        <li>Open <a href="https://dev.twitch.tv/console/apps" target="_blank" rel="noopener">dev.twitch.tv/console/apps</a> en klik op <b>Register Your Application</b> (Toepassing registreren). Je hebt tweestapsverificatie op je Twitch-account nodig.</li>
-        <li><b>Naam:</b> vrij te kiezen, bijv. <i>Modview Dave</i>.</li>
-        <li><b>OAuth Redirect URL</b> (omleidings-URL), precies zo, met de slash aan het eind:<br>
-          <span class="copyline"><code id="redirectUrl"></code><button type="button" id="copyRedirect">Kopieer</button></span></li>
-        <li><b>Categorie:</b> kies <b>Chat Bot</b>.</li>
-        <li><b>Clienttype:</b> kies <b>Openbaar / Public</b>. Niet <i>Vertrouwelijk / Confidential</i>.</li>
-        <li>Klik op <b>Create</b> (Maken), daarna bij je app op <b>Manage</b> (Beheren).</li>
-        <li>Kopieer de <b>Client ID</b> en plak hem hierboven. Klik dan op <b>Inloggen met Twitch</b>.</li>
-      </ol>
-    </details>
-    </details>
     <div class="row" style="justify-content:flex-start">
       <button class="primary" id="loginBtn">Inloggen met Twitch</button>
       <button id="logoutBtn">Uitloggen</button>
@@ -713,7 +691,7 @@
     set(k, v) { try { localStorage.setItem('modv.' + k, JSON.stringify(v)); } catch {} if (CLOUD_KEYS.includes(k)) cloudTouch(); },
     del(k) { try { localStorage.removeItem('modv.' + k); } catch {} },
   };
-  const CLOUD_KEYS = ['tabs', 'shortcuts', 'clientId', 'opts', 'words', 'notes', 'modlog', 'extraChans'];
+  const CLOUD_KEYS = ['tabs', 'shortcuts', 'opts', 'words', 'notes', 'modlog', 'extraChans'];
   const cloudSync = { t: null };
   // opties; de hl-* zijn de kleuren in de chat die je via ⚙ Chat aan en uit zet
   const opts = Object.assign({ hlWords: true, hlMention: true, hlFirst: true, hlEvents: true, notifyLive: false, notifyMention: false, cloudAuto: false }, store.get('opts', {}));
@@ -731,7 +709,6 @@
     tabs: loadTabs(),                        // [{id, name, zones: [{channel, kind, w, h}]}]
     tab: store.get('tab', null),
     shortcuts: store.get('shortcuts', []),   // [{id, name, type, text, dur, reason, key}]
-    clientId: store.get('clientId', ''),
     token: store.get('token', ''),
     me: null,                                // {login, user_id, client_id}
     active: null,                            // kanaal van actieve zone
@@ -795,10 +772,8 @@
   }
 
   function login() {
-    const id = $('#clientId').value.trim() || DEFAULT_CLIENT_ID;
-    if (!id) return toast('Vul eerst je Client ID in.', 'err');
+    const id = DEFAULT_CLIENT_ID;
     if (location.protocol === 'file:') return toast('Inloggen werkt alleen als de pagina via http(s) draait (bijv. localhost of online). Open de pagina via r5mod.daver5.nl.', 'err');
-    if ($('#clientId').value.trim()) { state.clientId = id; store.set('clientId', id); }
     const u = new URL('https://id.twitch.tv/oauth2/authorize');
     u.search = new URLSearchParams({ client_id: id, redirect_uri: redirectUri, response_type: 'token', scope: SCOPES.join(' '), force_verify: 'true' });
     location.href = u.toString();
@@ -3140,8 +3115,7 @@
     saveShortcuts(); renderShortcuts(); closeScModal();
   };
   $('#settingsBtn').onclick = () => {
-    $('#ownApp').open = !DEFAULT_CLIENT_ID || !!state.clientId;
-    $('#howto').open = !state.me && !DEFAULT_CLIENT_ID; $('#clientId').value = state.clientId; renderAccount();
+    renderAccount();
     $('#wordsBox').value = words.join('\n');
     $('#notifyLive').checked = opts.notifyLive; $('#notifyMention').checked = opts.notifyMention; renderNotifyHint();
     $('#gistToken').value = store.get('gistToken', ''); $('#cloudAuto').checked = opts.cloudAuto; renderCloud();
@@ -3280,7 +3254,7 @@
   $('#logoutBtn').onclick = logout;
 
   function backupData() {
-    return { app: 'R5 ModHub', versie: 2, tabs: state.tabs, shortcuts: state.shortcuts, clientId: state.clientId, opts, words, notes, modlog, extraChans };
+    return { app: 'R5 ModHub', versie: 2, tabs: state.tabs, shortcuts: state.shortcuts, opts, words, notes, modlog, extraChans };
   }
   function applyBackup(j) {
     if (Array.isArray(j.shortcuts)) { state.shortcuts = j.shortcuts; saveShortcuts(); }
@@ -3289,7 +3263,6 @@
       Object.keys(zoneEls).forEach((c) => { clearInterval(zoneEls[c].demoT); clearInterval(zoneEls[c].timer); clearInterval(zoneEls[c].tickT); if (zoneEls[c].player) zoneEls[c].player.remove(); delete zoneEls[c]; });
       state.tabs = tabs; state.tab = tabs[0].id; saveTabs(); store.set('tab', state.tab);
     }
-    if (j.clientId) { state.clientId = j.clientId; store.set('clientId', j.clientId); $('#clientId').value = j.clientId; }
     if (j.opts) { Object.assign(opts, j.opts); saveOpts(); }
     if (Array.isArray(j.words)) { words = j.words; store.set('words', words); $('#wordsBox').value = words.join('\n'); }
     if (j.notes && typeof j.notes === 'object') { notes = j.notes; store.set('notes', notes); }
@@ -3315,11 +3288,7 @@
   };
 
   // ---------- start ----------
-  $('#redirectUrl').textContent = redirectUri;
-  $('#copyRedirect').onclick = async () => {
-    try { await navigator.clipboard.writeText(redirectUri); toast('Redirect URL gekopieerd.', 'ok'); }
-    catch { toast('Kopiëren lukte niet; selecteer de tekst en kopieer hem zelf.', 'err'); }
-  };
+
   readTokenFromHash();
   renderShortcuts();
   renderTabs();
