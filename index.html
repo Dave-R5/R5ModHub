@@ -654,7 +654,7 @@
       <input id="hfName" name="naam" autocomplete="off" maxlength="60" placeholder="bijv. dave_r5">
       <label for="hfMsg">Vraag of suggestie</label>
       <textarea id="hfMsg" name="vraag" rows="4" maxlength="3000" required></textarea>
-      <input class="hp" name="_gotcha" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <input class="hp" type="checkbox" name="botcheck" tabindex="-1" autocomplete="off" aria-hidden="true">
       <div class="row" style="justify-content:flex-start"><button class="primary" id="hfSend" type="submit">Verzenden</button><span class="hint" id="hfState"></span></div>
     </form>
     </details>
@@ -3219,22 +3219,27 @@
     if (state.me && !$('#hfName').value) $('#hfName').value = state.me.login;
     openModal('helpModal');
   };
-  // Contactformulier: verstuurd via Formspree, zodat het ontvangstadres niet in de code staat.
-  const FORMSPREE_ID = 'mnpjewwq';
+  // Contactformulier: verstuurd via Web3Forms, zodat het ontvangstadres niet in de code staat.
+  // De access key is openbaar bedoeld: hij kan alleen naar het ingestelde adres sturen.
+  const WEB3FORMS_KEY = '';
   $('#helpForm').onsubmit = async (e) => {
     e.preventDefault();
     const f = e.currentTarget, email = $('#hfEmail').value.trim(), msg = $('#hfMsg').value.trim();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast('Vul een geldig e-mailadres in.', 'err');
     if (!msg) return toast('Vul je vraag of suggestie in.', 'err');
-    if (!FORMSPREE_ID) return toast('Het formulier is nog niet ingesteld.', 'err');
+    if (!WEB3FORMS_KEY) return toast('Het formulier is nog niet ingesteld.', 'err');
     const btn = $('#hfSend');
     btn.disabled = true; $('#hfState').textContent = 'Bezig met verzenden…';
     try {
-      const data = new FormData(f);
-      if (state.me) data.append('twitch_id', state.me.user_id);
-      data.append('_subject', 'R5 ModHub: vraag van ' + ($('#hfName').value.trim() || email));
-      const r = await fetch('https://formspree.io/f/' + FORMSPREE_ID, { method: 'POST', body: data, headers: { Accept: 'application/json' } });
-      if (!r.ok) throw new Error('fout ' + r.status);
+      const name = $('#hfName').value.trim();
+      const body = {
+        access_key: WEB3FORMS_KEY, subject: 'R5 ModHub: vraag van ' + (name || email), from_name: 'R5 ModHub',
+        email, naam: name, vraag: msg, botcheck: f.botcheck.checked,
+      };
+      if (state.me) body.twitch_id = state.me.user_id;
+      const r = await fetch('https://api.web3forms.com/submit', { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json', Accept: 'application/json' } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.success) throw new Error(j.message || 'fout ' + r.status);
       $('#hfMsg').value = ''; $('#hfState').textContent = '';
       toast('Bedankt! Je bericht is verstuurd.', 'ok');
     } catch (err) {
