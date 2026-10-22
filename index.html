@@ -334,8 +334,7 @@
   .help-sec li { margin: 5px 0; }
   .help-sec li b { color: #cdb8ff; font-weight: 600; }
   .help-sec a { color: var(--accent); }
-  .help-form { margin-top: 14px; border: 1px solid #4b3a75; border-radius: 8px; background: var(--bg); padding: 12px; }
-  .help-form h3 { margin: 0 0 4px; font-size: 14px; }
+  .help-form { padding: 10px 14px 12px; }
   .help-form label { margin-top: 8px; }
   .help-form .hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
   .help-form .row { margin-top: 10px; }
@@ -652,8 +651,9 @@
         <li>Wissel onderin tussen <b>Chat</b>, <b>Knoppen</b> en <b>Kijkers</b>.</li>
       </ul>
     </details>
+    <details class="help-sec">
+      <summary><span class="hi">✉</span>Vragen of suggesties<small>stuur een bericht</small></summary>
     <form class="help-form" id="helpForm" novalidate>
-      <h3>✉ Vragen of suggesties</h3>
       <p class="hint" style="margin:0">Voor vragen of suggesties kun je dit formulier invullen.</p>
       <label for="hfEmail">E-mail</label>
       <input id="hfEmail" name="email" type="email" autocomplete="email" placeholder="jij@voorbeeld.nl" required>
@@ -664,6 +664,7 @@
       <input class="hp" name="_gotcha" tabindex="-1" autocomplete="off" aria-hidden="true">
       <div class="row" style="justify-content:flex-start"><button class="primary" id="hfSend" type="submit">Verzenden</button><span class="hint" id="hfState"></span></div>
     </form>
+    </details>
     <div class="row"><button class="primary" data-close>Sluiten</button></div>
   </div>
 </div>
