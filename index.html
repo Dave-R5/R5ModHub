@@ -317,6 +317,22 @@
   #mlState { font-size: 12px; margin: 6px 0; }
   .optrow { display: flex; align-items: center; gap: 8px; margin: 8px 0; cursor: pointer; font-size: 13px; }
   .optrow input { width: auto; }
+
+  /* hulp-overzicht */
+  #helpBtn { font-size: 15px; padding: 3px 9px; }
+  .help-intro { margin: 0 0 10px; }
+  .help-sec { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); margin: 6px 0; }
+  .help-sec summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 10px; padding: 9px 12px; font-weight: 600; user-select: none; }
+  .help-sec summary::-webkit-details-marker { display: none; }
+  .help-sec summary .hi { width: 22px; text-align: center; font-size: 16px; }
+  .help-sec summary small { color: var(--muted); font-weight: 400; margin-left: auto; font-size: 12px; text-align: right; }
+  .help-sec summary::after { content: '▾'; color: var(--muted); transition: transform .15s; }
+  .help-sec[open] summary::after { transform: rotate(180deg); }
+  .help-sec[open] { border-color: #4b3a75; }
+  .help-sec[open] summary { border-bottom: 1px solid var(--line); }
+  .help-sec ul { margin: 8px 0 10px; padding: 0 14px 0 34px; font-size: 13px; }
+  .help-sec li { margin: 5px 0; }
+  .help-sec li b { color: #cdb8ff; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -329,6 +345,7 @@
     <button id="addScBtn" class="primary" title="Sneltoetsen bewerken of verwijderen">✎ Sneltoetsen</button>
     <button id="cloudInd" hidden title="Cloud-back-up (klik voor instellingen)"></button>
     <button id="bellBtn" title="Meldingen">🔔</button>
+    <button id="helpBtn" title="Hulp: wat kan R5 ModHub allemaal?">❓</button>
     <button id="modlogBtn" title="Modlog: wat jij als mod hebt gedaan">📋 Modlog</button>
     <button id="viewBtn" hidden title="Weergave kiezen">▣ Weergave</button>
     <span id="selInfo"></span>
@@ -525,6 +542,100 @@
     <div id="teList"></div>
     <p class="hint">Een kanaal toevoegen doe je met <b>+ Zone</b>.</p>
     <div class="row"><button class="primary" data-close>Klaar</button></div>
+  </div>
+</div>
+
+<!-- Hulp -->
+<div class="modal-bg" id="helpModal">
+  <div class="modal" style="max-width:560px">
+    <h2>❓ Wat kan R5 ModHub?</h2>
+    <p class="hint help-intro">Klik op een onderdeel om het open te klappen.</p>
+    <details class="help-sec" open>
+      <summary><span class="hi">🚀</span>Starten<small>inloggen en uitproberen</small></summary>
+      <ul>
+        <li><b>Inloggen</b>: klik op ⚙ en dan op <b>Inloggen met Twitch</b>. Zonder login kun je alleen chat lezen.</li>
+        <li><b>Uitproberen</b>: voeg met <b>+ Zone</b> het kanaal <b>demo</b> toe voor een nepchat, zonder in te loggen.</li>
+        <li><b>Als app</b>: via ⚙ installeer je de web-app of de Windows-app.</li>
+      </ul>
+    </details>
+    <details class="help-sec">
+      <summary><span class="hi">🏠</span>Hoofd-tabblad<small>jouw kanalen</small></summary>
+      <ul>
+        <li>Knoppen voor alle kanalen waar je mod bent, met <b>live-status</b> en aantal kijkers.</li>
+        <li>Klik op een kanaal om het in een <b>eigen tabblad</b> te openen met stream, chat en kijkers.</li>
+        <li>Met <b>+ Streamer</b> zet je er ook kanalen bij waar je geen mod bent.</li>
+      </ul>
+    </details>
+    <details class="help-sec">
+      <summary><span class="hi">🗂</span>Tabbladen en zones<small>je eigen indeling</small></summary>
+      <ul>
+        <li><b>+ Tabblad</b> maakt een nieuw tabblad. Slepen verplaatst, dubbelklik hernoemt, ✎ zet blokken aan of uit.</li>
+        <li><b>+ Zone</b> voegt toe: chat, stream, stream + chat, kijkerslijst, modlog of kijkersgrafiek.</li>
+        <li>Sleep een zone aan de kop om hem te verplaatsen, of in het onderste deel van een andere zone om ze <b>onder elkaar</b> te zetten.</li>
+        <li><b>▦ Schikken</b> zet alle blokken netjes naast elkaar.</li>
+        <li>Elk tabblad krijgt vanzelf een <b>knoppenpaneel</b> naast de chat.</li>
+      </ul>
+    </details>
+    <details class="help-sec">
+      <summary><span class="hi">💬</span>Chat<small>lezen en sturen</small></summary>
+      <ul>
+        <li>Klik op een <b>bericht</b> om het te selecteren, klik op een <b>naam</b> voor de gebruikerskaart.</li>
+        <li><b>↩</b> om te antwoorden, <b>@</b> typen voor een keuzelijst met namen, <b>pijl omhoog/omlaag</b> voor eerder verstuurde berichten.</li>
+        <li>Emote-kiezer met Twitch-, 7TV-, BTTV- en FFZ-emotes, plus 7TV-naamkleuren en badges.</li>
+        <li>Scroll je omhoog, dan pauzeert de chat. Klik op de paarse balk om terug te gaan.</li>
+      </ul>
+    </details>
+    <details class="help-sec">
+      <summary><span class="hi">🛡</span>Chatmodus en kleuren<small>⚙ Chat ▾ per chat</small></summary>
+      <ul>
+        <li>Schakel <b>Shield mode</b>, <b>emote-only</b> en <b>follower-only</b> aan of uit.</li>
+        <li>Kleuren aan of uit voor <b>woordfilter</b>, berichten waarin jij <b>genoemd</b> wordt, <b>eerste berichten</b> en <b>nieuwe accounts</b> (jonger dan 7 dagen).</li>
+        <li>Subs, raids en bits verschijnen als aparte regels in de chat.</li>
+      </ul>
+    </details>
+    <details class="help-sec">
+      <summary><span class="hi">👤</span>Gebruikerskaart<small>klik op een naam</small></summary>
+      <ul>
+        <li>Snelle acties: <b>bericht weg</b>, <b>purge</b>, timeout <b>10 min / 1 uur / 1 dag</b>, <b>ban</b> en <b>unban</b>.</li>
+        <li>Antwoorden, noemen, profiel openen en de Twitch-modlogs van deze gebruiker.</li>
+        <li>Je eigen sneltoetsen met {user}, een <b>privénotitie</b> en eerdere modacties.</li>
+        <li>Sleep de kaart aan de kop naar een andere plek.</li>
+      </ul>
+    </details>
+    <details class="help-sec">
+      <summary><span class="hi">⚡</span>Sneltoetsen<small>eigen knoppen en toetsen</small></summary>
+      <ul>
+        <li>Via <b>✎ Sneltoetsen</b> maak je knoppen: chatbericht, timeout, ban, unban of bericht verwijderen.</li>
+        <li>Geef er optioneel een <b>toets</b> bij, zoals F1, Ctrl+1 of Alt+T.</li>
+        <li>Variabelen in berichten: <b>{user}</b>, <b>{channel}</b> en <b>{game}</b>.</li>
+        <li><b>Rechtsklik</b> op een knop om hem te bewerken. <b>Esc</b> haalt de selectie weg.</li>
+      </ul>
+    </details>
+    <details class="help-sec">
+      <summary><span class="hi">📋</span>Modlog en meldingen<small>overzicht houden</small></summary>
+      <ul>
+        <li><b>📋 Modlog</b>: modacties van alle mods in jouw kanalen, met wie het deed. Doorzoekbaar per kanaal.</li>
+        <li><b>🔔 Meldingen</b> als een kanaal live gaat of als iemand jou noemt (aan te zetten in ⚙).</li>
+        <li><b>Kijkersgrafiek</b> met export naar Excel (CSV). De streamkop toont live-tijd en kijkers.</li>
+      </ul>
+    </details>
+    <details class="help-sec">
+      <summary><span class="hi">⚙</span>Instellingen en back-up<small>alles bewaren</small></summary>
+      <ul>
+        <li><b>Woordfilter</b>: woorden of zinnen die rood gemarkeerd worden.</li>
+        <li><b>Exporteren / importeren</b> van al je instellingen als bestand.</li>
+        <li><b>Cloud-back-up</b> via je eigen GitHub, ook automatisch, om alles naar een ander apparaat over te zetten.</li>
+        <li>In de Windows-app: <b>zoeken naar updates</b>.</li>
+      </ul>
+    </details>
+    <details class="help-sec">
+      <summary><span class="hi">📱</span>Mobiel<small>op telefoon of tablet</small></summary>
+      <ul>
+        <li>Kies <b>Chat</b> of <b>Video + chat</b> als je een tabblad opent.</li>
+        <li>Wissel onderin tussen <b>Chat</b>, <b>Knoppen</b> en <b>Kijkers</b>.</li>
+      </ul>
+    </details>
+    <div class="row"><button class="primary" data-close>Sluiten</button></div>
   </div>
 </div>
 
@@ -3006,6 +3117,7 @@
     $('#gistToken').value = store.get('gistToken', ''); $('#cloudAuto').checked = opts.cloudAuto; renderCloud();
     openModal('setModal'); };
   $('#modlogBtn').onclick = () => { renderModlog(); openModal('modlogModal'); };
+  $('#helpBtn').onclick = () => openModal('helpModal');
   $('#mlChan').onchange = renderModlog;
   $('#mlSearch').oninput = renderModlog;
   $('#mlClear').onclick = () => { if (!confirm('Hele modlog leegmaken?')) return; modlog = []; store.set('modlog', modlog); renderModlog(); };
