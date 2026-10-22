@@ -149,7 +149,8 @@
   .tadd { white-space: nowrap; min-height: 44px; padding: 0 14px; }
   .zone.stream { width: 640px; height: 400px; background: #000; }
   .zone-head .uptime { color: #ff4f4f; font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
-  .zone-head .uptime:empty { display: none; }
+  .zone-head .uptime:empty, .zone-head .vcount:empty { display: none; }
+  .zone-head .vcount { color: #ff4f4f; font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; margin-left: 8px; white-space: nowrap; }
   .zone.stream .player-slot { flex: 1; margin-bottom: 14px; }
   #players { position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 5; }
   #players .pl { position: fixed; display: flex; background: #000; }
@@ -1583,15 +1584,20 @@
     }));
   }
   function buildStream(z) {
-    const zone = makeShell(z, '▶ ' + z.channel, '<span class="uptime" title="Hoelang live"></span>');
+    const zone = makeShell(z, '▶ ' + z.channel, '<span class="uptime" title="Hoelang live"></span><span class="vcount" title="Kijkers nu"></span>');
     zone.dot.classList.add('live');
     // hoelang live: begintijd elke minuut bij Twitch ophalen, de teller loopt elke seconde
-    const up = zone.root.querySelector('.uptime');
+    const up = zone.root.querySelector('.uptime'), vc = zone.root.querySelector('.vcount');
     zone.poll = async () => {
-      if (z.channel === 'demo') zone.started = zone.started || Date.now() - 3725000;
+      if (z.channel === 'demo') { zone.started = zone.started || Date.now() - 3725000; zone.vnow = 184; }
       else if (state.me) {
-        try { const st = (await helix('GET', 'streams', { user_login: z.channel })).data[0]; zone.started = st ? Date.parse(st.started_at) : 0; } catch {}
+        try {
+          const st = (await helix('GET', 'streams', { user_login: z.channel })).data[0];
+          zone.started = st ? Date.parse(st.started_at) : 0; zone.vnow = st ? st.viewer_count : null;
+          if (st) recordViewers(z.channel, st.viewer_count);
+        } catch {}
       }
+      vc.textContent = zone.started && zone.vnow != null ? '👁 ' + zone.vnow.toLocaleString('nl-NL') : '';
       zone.dot.classList.toggle('live', !!zone.started || !state.me);
     };
     const tick = () => {
