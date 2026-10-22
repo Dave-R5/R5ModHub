@@ -13,7 +13,7 @@ const inApp = (url) => url.startsWith(START_URL);
 // Bij het starten (en elke 4 uur) wordt gezocht; een nieuwe versie wordt op de achtergrond
 // gedownload en daarna gevraagd om te herstarten. Anders installeert hij bij afsluiten.
 // De site toont dit in Instellingen > Windows-app (checkUpdate / openDownload).
-const RELEASES_URL = 'https://github.com/daveroosjen5-maker/modweergave/releases';
+const RELEASES_URL = 'https://github.com/Dave-R5/modweergave/releases';
 const newer = (a, b) => {
   const x = a.split('.').map(Number), y = b.split('.').map(Number);
   for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
