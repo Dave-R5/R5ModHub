@@ -660,6 +660,13 @@
       <summary><span class="hi">📜</span>Changelog<small>wat is er veranderd</small></summary>
       <div class="cl">
         <details class="cl-ver" open>
+          <summary>Nieuw sinds 1.5.0 <small>22 okt 2026</small></summary>
+          <ul>
+            <li><b>Emotekiezer</b>: je Twitch-emotes staan per kanaal, met het kanaal waarin je chat bovenaan.</li>
+            <li><b>Probeer de demo</b> opent nu de volledige demo met stream, chat, knoppen, modlog en kijkers.</li>
+          </ul>
+        </details>
+        <details class="cl-ver">
           <summary>Versie 1.5.0 <small>22 okt 2026</small></summary>
           <ul>
             <li><b>Inloggen in de app</b>: na de eerste keer inloggen bij Twitch ga je nu meteen door naar het toestemmingsscherm, in plaats van op de Twitch-startpagina te blijven hangen.</li>
@@ -2113,14 +2120,8 @@
       '<p class="more">Meer info vind je altijd via ❓ rechtsboven.</p>';
     w.querySelector('[data-w=login]').onclick = login;
     w.querySelector('[data-w=help]').onclick = () => $('#helpBtn').click();
-    w.querySelector('[data-w=demo]').onclick = () => {
-      let t = state.tabs.find((x) => x.channel === 'demo');
-      if (t) return switchTab(t.id);
-      t = { id: 't' + Date.now().toString(36), name: 'Demo', channel: 'demo', zones: [] };
-      state.tabs.push(t); saveTabs();
-      switchTab(t.id);
-      addZone('demo', 'chat');
-    };
+    // zelfde als + Tabblad met "demo": volledige standaardindeling
+    w.querySelector('[data-w=demo]').onclick = () => openChannelTab('demo');
     return w;
   }
 
@@ -2387,7 +2388,7 @@
 
   // ---------- emotes (Twitch en 7TV) ----------
   // per bron een lijst naam -> afbeelding; Twitch-emotes in berichten van anderen komen via de chat zelf mee
-  const emo = { stvGlobal: {}, stvChan: {}, twGlobal: {}, twUser: {}, twChan: {}, bttvGlobal: {}, bttvChan: {}, ffzGlobal: {}, ffzChan: {} };
+  const emo = { stvGlobal: {}, stvChan: {}, twGlobal: {}, twUser: {}, twUserBy: {}, twOwners: {}, twChan: {}, bttvGlobal: {}, bttvChan: {}, ffzGlobal: {}, ffzChan: {} };
 
   function renderWords(str, ch, own, uid) {
     if (!str) return '';
@@ -2439,15 +2440,23 @@
     try { emo.twGlobal = twMap(await helix('GET', 'chat/emotes/global'), {}); } catch {}
     // jouw eigen emotes (abonnementen e.d.); werkt pas na opnieuw inloggen met de nieuwe rechten
     try {
-      const all = {};
+      const all = {}, by = {};
       let cursor = '';
       for (let i = 0; i < 20; i++) {
         const j = await helix('GET', 'chat/emotes/user', cursor ? { user_id: state.me.user_id, after: cursor } : { user_id: state.me.user_id });
         twMap(j, all);
+        // per kanaal (owner_id) apart, voor de groepen in de emotekiezer
+        (j.data || []).forEach((e) => { const o = e.owner_id || '0'; twMap({ template: j.template, data: [e] }, by[o] || (by[o] = {})); });
         cursor = j.pagination && j.pagination.cursor;
         if (!cursor) break;
       }
-      emo.twUser = all;
+      emo.twUser = all; emo.twUserBy = by;
+      // kanaalnamen bij de owner-id's ophalen
+      const ids = Object.keys(by).filter((id) => id !== '0' && id !== 'twitch' && !emo.twOwners[id]);
+      for (let i = 0; i < ids.length; i += 100) {
+        const q = new URLSearchParams(); ids.slice(i, i + 100).forEach((id) => q.append('id', id));
+        try { (await helix('GET', 'users?' + q.toString())).data.forEach((u) => { emo.twOwners[u.id] = { login: u.login, name: u.display_name }; }); } catch {}
+      }
     } catch {}
   }
   const chanLoaded = {};
@@ -2632,7 +2641,11 @@
     const groups = [
       ['Jouw 7TV-emotes', state.me && stv.personal[state.me.user_id]],
       ['7TV ' + ch, emo.stvChan[ch]], ['BTTV ' + ch, emo.bttvChan[ch]], ['FFZ ' + ch, emo.ffzChan[ch]],
-      ['Twitch ' + ch, emo.twChan[ch]], ['Jouw Twitch-emotes', emo.twUser],
+      // jouw Twitch-emotes per kanaal: eerst dit kanaal, dan de rest op naam, als laatste de algemene
+      ...Object.entries(emo.twUserBy).map(([id, m]) => [id, m, emo.twOwners[id]]).sort((a, b) =>
+        (!a[2] - !b[2]) || ((b[2] && b[2].login === ch) - (a[2] && a[2].login === ch)) || ((a[2] || {}).name || '').localeCompare((b[2] || {}).name || ''))
+        .map(([, m, o]) => [o ? 'Jouw emotes: ' + o.name : 'Jouw overige Twitch-emotes', m]),
+      ['Twitch ' + ch, emo.twChan[ch]],
       ['Twitch algemeen', emo.twGlobal], ['7TV algemeen', emo.stvGlobal], ['BTTV algemeen', emo.bttvGlobal], ['FFZ algemeen', emo.ffzGlobal],
     ].filter(([, m]) => m && Object.keys(m).length);
     pk.innerHTML = '<input class="pk-search" placeholder="Zoek emote…" autocomplete="off"><div class="pk-body"></div>';
