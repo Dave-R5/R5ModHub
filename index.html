@@ -123,6 +123,8 @@
   .zone-foot { position: relative; }
   .tag.points { background: #2a5d8f; }
   .msg.raid-out { background: rgba(255, 79, 79, .12); border-left-color: #ff4f4f; }
+  .raid-cd { color: #ff8a8a; font-size: 12px; margin-left: 4px; }
+  .raid-stay { margin-left: 6px; padding: 2px 10px; font-size: 13px; touch-action: manipulation; }
   .raid-go { margin-left: 6px; padding: 2px 10px; font-size: 13px; border-color: #ff4f4f; touch-action: manipulation; }
   body.hl-events .tag.points { display: inline; }
   body.hl-events .msg.hl-points, body.hl-events .msg.event.redeem { background: rgba(42, 93, 143, .25); border-left-color: #3d8fd6; }
@@ -2759,9 +2761,22 @@
     if (z) {
       const el = document.createElement('div');
       el.className = 'msg event raid-out';
-      el.innerHTML = '<span class="time">' + hhmm(new Date()) + '</span><span class="text">' + esc(what) + '</span> <button class="raid-go">Meegaan ▶</button>';
-      el.querySelector('.raid-go').onclick = (e) => { e.stopPropagation(); openChannelTab(to, toName); };
+      // automatisch mee na een korte aftelling, tenzij je op Verlaten drukt
+      el.innerHTML = '<span class="time">' + hhmm(new Date()) + '</span><span class="text">' + esc(what) + '</span> <span class="raid-cd"></span>' +
+        '<button class="raid-stay">Verlaten</button><button class="raid-go">Meegaan ▶</button>';
+      const cd = el.querySelector('.raid-cd'), stay = el.querySelector('.raid-stay'), go = el.querySelector('.raid-go');
+      let left = 10;
+      const finish = () => { clearInterval(tm); cd.textContent = ''; stay.hidden = true; };
+      const tm = setInterval(() => {
+        if (--left > 0) { cd.textContent = 'je gaat mee over ' + left + ' s'; return; }
+        finish(); openChannelTab(to, toName);
+      }, 1000);
+      cd.textContent = 'je gaat mee over ' + left + ' s';
+      stay.onclick = (e) => { e.stopPropagation(); finish(); cd.textContent = 'je blijft hier'; };
+      go.onclick = (e) => { e.stopPropagation(); finish(); openChannelTab(to, toName); };
+      if (from === 'demo') { finish(); cd.textContent = '(voorbeeld, gaat niet automatisch)'; }
       appendTo(z, el);
+      if (z.stick) z.msgs.scrollTop = z.msgs.scrollHeight;
     }
     if (from === 'demo') return;
     pushNote('raid', what, 'Klik om mee te gaan', to);
