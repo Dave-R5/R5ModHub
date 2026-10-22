@@ -79,6 +79,10 @@
   .gbox { flex: 1; min-height: 0; position: relative; }
   .gbox svg { position: absolute; inset: 0; width: 100%; height: 100%; }
   .gbox svg text { fill: var(--muted); font-size: 11px; }
+  .gsum { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 4px 8px 6px; font-size: 12px; color: var(--muted); }
+  .gsum:empty { display: none; }
+  .gsum b { color: #f5b942; font-weight: 600; }
+  .gsum i { font-style: normal; } .gsum i.up { color: #3ecf6e; } .gsum i.down { color: #ff4f8b; }
   .gbox .gempty { margin: auto; padding: 16px; color: var(--muted); text-align: center; font-size: 13px; }
   #bellBtn { position: relative; }
   #bellBtn .bcount { position: absolute; top: -6px; right: -6px; background: var(--danger); color: #fff; border-radius: 9px; font-size: 10px; min-width: 17px; padding: 1px 4px; line-height: 15px; }
@@ -663,6 +667,7 @@
           <summary>Nieuw sinds 1.5.0 <small>22 okt 2026</small></summary>
           <ul>
             <li><b>Emotekiezer</b>: je Twitch-emotes staan per kanaal, met het kanaal waarin je chat bovenaan. Emotes van hetzelfde kanaal staan nu in één groep.</li>
+            <li><b>Kijkersgrafiek</b>: een gele streep met de gamenaam bij elke gamewissel, en onder de grafiek per game hoeveel kijkers erbij kwamen of weggingen.</li>
             <li><b>Probeer de demo</b> opent nu de volledige demo met stream, chat, knoppen, modlog en kijkers.</li>
           </ul>
         </details>
@@ -1694,7 +1699,7 @@
       try {
         const st = await helix('GET', 'streams', { user_login: ch });
         zone.viewers = st.data.length ? st.data[0].viewer_count : null;
-        recordViewers(ch, zone.viewers);
+        recordViewers(ch, zone.viewers, st.data.length ? st.data[0].game_name : '');
       } catch { zone.viewers = undefined; }
       drawUsers(zone);
     } catch (e) {
@@ -1769,11 +1774,13 @@
   }
 
   // ---------- kijkersgrafiek (huidige stream, op dit apparaat bijgehouden) ----------
-  const vhist = store.get('vhist', {});   // kanaal -> [[tijd, kijkers]]
-  function recordViewers(ch, v) {
+  const vhist = store.get('vhist', {});   // kanaal -> [[tijd, kijkers, game]]
+  function recordViewers(ch, v, game) {
     if (v == null) return;
     const a = vhist[ch] || (vhist[ch] = []), now = Date.now();
-    if (a.length && now - a[a.length - 1][0] < 50000) a[a.length - 1][1] = v; else a.push([now, v]);
+    // zonder game (bijv. uit de kijkerslijst) geldt de game van het vorige meetpunt
+    const g = game || (a.length ? a[a.length - 1][2] : '') || '';
+    if (a.length && now - a[a.length - 1][0] < 50000) { a[a.length - 1][1] = v; if (game) a[a.length - 1][2] = g; } else a.push([now, v, g]);
     while (a.length && now - a[0][0] > 12 * 3600 * 1000) a.shift();
     if (ch !== 'demo') store.set('vhist', vhist);
     const gz = zoneEls['graph:' + ch];
@@ -1789,7 +1796,8 @@
   function demoViewers() {
     if (!vhist.demo) {
       const now = Date.now();
-      vhist.demo = Array.from({ length: 40 }, (_, i) => [now - (40 - i) * 120000, Math.round(60 + i * 2 + Math.sin(i / 3) * 12 + (i > 25 ? 120 : 0))]);
+      vhist.demo = Array.from({ length: 40 }, (_, i) => [now - (40 - i) * 120000, Math.round(60 + i * 2 + Math.sin(i / 3) * 12 + (i > 25 ? 120 : 0) - (i > 14 && i <= 25 ? 25 : 0)),
+        i <= 14 ? 'Just Chatting' : 'Minecraft']);
       raidMarks.demo = [[vhist.demo[26][0], 120]];
     }
     const v = Math.max(1, vhist.demo[vhist.demo.length - 1][1] + Math.round(Math.random() * 6 - 3));
@@ -1819,7 +1827,7 @@
         try {
           const st = (await helix('GET', 'streams', { user_login: z.channel })).data[0];
           zone.started = st ? Date.parse(st.started_at) : 0; zone.vnow = st ? st.viewer_count : null;
-          if (st) recordViewers(z.channel, st.viewer_count);
+          if (st) recordViewers(z.channel, st.viewer_count, st.game_name);
         } catch {}
       }
       vc.textContent = zone.started && zone.vnow != null ? '👁 ' + zone.vnow.toLocaleString('nl-NL') : '';
@@ -1939,10 +1947,11 @@
   // ---------- grote kijkersgrafiek ----------
   function buildGraphZone(z) {
     const zone = makeShell(z, '📈 Kijkers tijdens de stream', '<span class="gnow"></span><button class="icon" data-act="csv" title="Exporteren naar Excel (CSV)">⤓</button>');
-    zone.root.insertAdjacentHTML('beforeend', '<div class="gbox"></div>');
+    zone.root.insertAdjacentHTML('beforeend', '<div class="gbox"></div><div class="gsum"></div>');
     zone.root.querySelector('[data-act=csv]').onclick = () => exportViewers(z.channel);
     zone.box = zone.root.querySelector('.gbox');
     zone.now = zone.root.querySelector('.gnow');
+    zone.sum = zone.root.querySelector('.gsum');
     zone.redraw = () => drawBigGraph(zone);
     new ResizeObserver(() => zone.redraw()).observe(zone.box);
     zone.poll = async () => {
@@ -1951,7 +1960,7 @@
         try {
           const st = await helix('GET', 'streams', { user_login: z.channel });
           zone.offline = !st.data.length;
-          if (st.data.length) recordViewers(z.channel, st.data[0].viewer_count);
+          if (st.data.length) recordViewers(z.channel, st.data[0].viewer_count, st.data[0].game_name);
         } catch {}
       }
       zone.redraw();
@@ -1965,12 +1974,12 @@
     const a = streamSamples(ch);
     if (!a.length) return toast('Nog geen kijkersgegevens voor ' + ch + '.', 'err');
     const t0 = a[0][0];
-    const rows = a.map((x) => [x[0], x[1], '']);
-    (raidMarks[ch] || []).filter((r) => r[0] >= t0).forEach((r) => rows.push([r[0], '', 'raid +' + r[1]]));
+    const rows = a.map((x) => [x[0], x[1], '', x[2] || '']);
+    (raidMarks[ch] || []).filter((r) => r[0] >= t0).forEach((r) => rows.push([r[0], '', 'raid +' + r[1], '']));
     rows.sort((x, y) => x[0] - y[0]);
     const d2 = (n) => String(n).padStart(2, '0');
     const fmt = (t) => { const d = new Date(t); return d.getFullYear() + '-' + d2(d.getMonth() + 1) + '-' + d2(d.getDate()) + ';' + d2(d.getHours()) + ':' + d2(d.getMinutes()); };
-    const csv = '\ufeffDatum;Tijd;Kijkers;Raid\r\n' + rows.map((r) => fmt(r[0]) + ';' + r[1] + ';' + r[2]).join('\r\n') + '\r\n';
+    const csv = '\ufeffDatum;Tijd;Kijkers;Raid;Game\r\n' + rows.map((r) => fmt(r[0]) + ';' + r[1] + ';' + r[2] + ';' + String(r[3]).replace(/;/g, ',')).join('\r\n') + '\r\n';
     const a2 = document.createElement('a');
     a2.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const nu = new Date();
@@ -1983,7 +1992,7 @@
     const W = zone.box.clientWidth, H = zone.box.clientHeight;
     if (!W || !H) return;
     if (a.length < 2 || zone.offline) {
-      zone.now.textContent = '';
+      zone.now.textContent = ''; zone.sum.innerHTML = '';
       zone.box.innerHTML = '<div class="gempty">' + (zone.offline ? esc(ch) + ' is nu offline.' : !state.me && ch !== 'demo' ? 'Log in (⚙) om de kijkers bij te houden.'
         : 'De grafiek vult zich zodra ' + esc(ch) + ' live is en R5 ModHub open staat (elke minuut een meetpunt).') + '</div>';
       return;
@@ -2006,6 +2015,22 @@
       g += '<line x1="' + X(r[0]) + '" x2="' + X(r[0]) + '" y1="' + T + '" y2="' + (T + h) + '" stroke="#ff4f8b" stroke-dasharray="3 3"/>' +
         '<text x="' + X(r[0]) + '" y="' + (T - 6) + '" text-anchor="middle" style="fill:#ff4f8b">raid +' + r[1] + '</text>';
     });
+    // gamewissels: streep met de nieuwe game, en per game een samenvatting onder de grafiek
+    const segs = [];
+    a.forEach((x, i) => {
+      const gm = x[2] || '';
+      if (!segs.length || gm !== segs[segs.length - 1].game) {
+        if (segs.length) g += '<line x1="' + X(x[0]) + '" x2="' + X(x[0]) + '" y1="' + T + '" y2="' + (T + h) + '" stroke="#f5b942" stroke-dasharray="3 3"/>';
+        if (gm) g += '<text x="' + (X(x[0]) + 4) + '" y="' + (T + 12) + '" style="fill:#f5b942">' + esc(gm) + '</text>';
+        segs.push({ game: gm, from: i > 0 ? a[i - 1][1] : x[1], start: x[0], vals: [] });
+      }
+      const sg = segs[segs.length - 1]; sg.vals.push(x[1]); sg.to = x[1]; sg.end = x[0];
+    });
+    zone.sum.innerHTML = segs.filter((sg) => sg.game).map((sg) => {
+      const d = sg.to - sg.from, avg = Math.round(sg.vals.reduce((p, v) => p + v, 0) / sg.vals.length);
+      return '<span title="' + hhmm(new Date(sg.start)) + ' – ' + hhmm(new Date(sg.end)) + '"><b>' + esc(sg.game) + '</b> ' + sg.from + ' → ' + sg.to +
+        ' <i class="' + (d > 0 ? 'up' : d < 0 ? 'down' : '') + '">(' + (d > 0 ? '+' : '') + d + ')</i> · gem. ' + avg + '</span>';
+    }).join('');
     zone.box.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '">' + g +
       '<polygon points="' + L + ',' + (T + h) + ' ' + pts + ' ' + X(t1) + ',' + (T + h) + '" fill="rgba(145,71,255,.2)"/>' +
       '<polyline points="' + pts + '" fill="none" stroke="#9147ff" stroke-width="2.5" stroke-linejoin="round"/></svg>';
@@ -2075,7 +2100,7 @@
       if (opts.notifyLive) notify(st.user_name + ' is live', body, 'live-' + st.user_id);
     });
     Object.values(live).forEach((st) => {
-      recordViewers(st.user_login, st.viewer_count);
+      recordViewers(st.user_login, st.viewer_count, st.game_name);
     });
     myChans.checked = true;
     myChans.live = live;
