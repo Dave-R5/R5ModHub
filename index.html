@@ -670,6 +670,7 @@
         <details class="cl-ver" open>
           <summary>Nieuw sinds 1.6.0 <small>23 okt 2026</small></summary>
           <ul>
+            <li><b>Kijkersgrafiek</b>: de raidstreep blijft nu ook na herladen staan, net als de gamestreep.</li>
             <li><b>Beloningsverzoeken</b> (app): ⟳-knop om de wachtrij te vernieuwen, en het blok is weer kleiner te maken via de hoek rechtsonder.</li>
           </ul>
         </details>
@@ -1016,7 +1017,7 @@
           raid: '🚀 ' + (t['msg-param-displayName'] || who) + ' raidt met ' + (t['msg-param-viewerCount'] || '?') + ' kijkers',
           announcement: '📣 Mededeling van ' + who,
         }[t['msg-id']] || (t['system-msg'] ? '✨ ' + t['system-msg'] : '');
-        if (t['msg-id'] === 'raid' && t.historical !== '1') { (raidMarks[ch] || (raidMarks[ch] = [])).push([Date.now(), +t['msg-param-viewerCount'] || 0]); const gz = zoneEls['graph:' + ch]; if (gz) gz.redraw(); }
+        if (t['msg-id'] === 'raid' && t.historical !== '1') addRaidMark(ch, +t['msg-param-viewerCount'] || 0);
         if (txt) addEvent(ch, txt, m.params[1] || '', t.emotes || '', t['user-id']);
         break;
       }
@@ -1810,7 +1811,16 @@
     for (let i = a.length - 1; i > 0; i--) if (a[i][0] - a[i - 1][0] > 20 * 60 * 1000) return a.slice(i);
     return a;
   }
-  const raidMarks = {};   // kanaal -> [[tijd, kijkers]]
+  // raids in de grafiek; net als de kijkers bewaard (12 uur), zodat ze na herladen blijven staan
+  const raidMarks = store.get('raids', {});   // kanaal -> [[tijd, kijkers]]
+  function addRaidMark(ch, n) {
+    const a = raidMarks[ch] || (raidMarks[ch] = []), now = Date.now();
+    a.push([now, n]);
+    while (a.length && now - a[0][0] > 12 * 3600 * 1000) a.shift();
+    if (ch !== 'demo') store.set('raids', Object.fromEntries(Object.entries(raidMarks).filter(([k]) => k !== 'demo')));
+    const gz = zoneEls['graph:' + ch];
+    if (gz) gz.redraw();
+  }
   function demoViewers() {
     if (!vhist.demo) {
       const now = Date.now();
