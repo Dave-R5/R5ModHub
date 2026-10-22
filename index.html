@@ -121,6 +121,16 @@
   .replybar span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .replybar[hidden] { display: none; }
   .zone-foot { position: relative; }
+  .tag.points { background: #2a5d8f; }
+  body.hl-events .tag.points { display: inline; }
+  body.hl-events .msg.hl-points, body.hl-events .msg.event.redeem { background: rgba(42, 93, 143, .25); border-left-color: #3d8fd6; }
+  .msg.poll { border: 1px solid var(--accent); border-radius: 6px; margin: 4px 6px; padding: 6px 8px; background: rgba(145, 71, 255, .08); }
+  .msg.poll.live { position: sticky; top: 0; z-index: 2; background: #1d1630; }
+  .poll-h { margin-bottom: 4px; } .poll-t { color: var(--muted); font-size: 12px; margin-left: 6px; }
+  .poll-c { position: relative; display: flex; justify-content: space-between; gap: 8px; padding: 3px 6px; margin: 2px 0; border-radius: 4px; background: var(--bg); overflow: hidden; font-size: 13px; }
+  .poll-c.win { outline: 1px solid var(--ok); }
+  .poll-bar { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(145, 71, 255, .35); }
+  .poll-l, .poll-v { position: relative; } .poll-v { color: var(--muted); white-space: nowrap; }
   .mention-dd { position: absolute; left: 6px; bottom: 100%; margin-bottom: 4px; z-index: 6; min-width: 180px; max-width: calc(100% - 12px);
     background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,.5); padding: 4px 0; }
   .mention-dd .mdd-i { padding: 6px 10px; cursor: pointer; font-size: 14px; }
@@ -676,7 +686,8 @@
 (() => {
   'use strict';
   const SCOPES = ['chat:read', 'chat:edit', 'moderator:manage:banned_users', 'moderator:manage:chat_messages', 'user:read:emotes', 'moderator:read:chatters', 'user:read:moderated_channels', 'moderation:read', 'channel:read:vips', 'moderator:manage:shield_mode', 'moderator:manage:chat_settings',
-    'moderator:read:blocked_terms', 'moderator:read:unban_requests', 'moderator:read:warnings', 'moderator:read:moderators', 'moderator:read:vips'];
+    'moderator:read:blocked_terms', 'moderator:read:unban_requests', 'moderator:read:warnings', 'moderator:read:moderators', 'moderator:read:vips',
+    'channel:read:polls', 'channel:read:redemptions'];
   const MAX_MSGS = 300;
   // Client ID van de gedeelde Twitch-app van deze site: hiermee kan iedereen direct inloggen.
   // Een Client ID is openbaar (geen wachtwoord), dus hij mag in de code staan.
@@ -901,6 +912,7 @@
           first: m.tags['first-msg'] === '1', bits: +m.tags.bits || 0,
           ts: +m.tags['tmi-sent-ts'] || 0, hist: m.tags.historical === '1',
           replyName: m.tags['reply-parent-display-name'] || '', replyBody: m.tags['reply-parent-msg-body'] || '',
+          reward: m.tags['custom-reward-id'] ? 'reward' : m.tags['msg-id'] === 'highlighted-message' ? 'highlight' : '',
         });
         break;
       }
@@ -2087,6 +2099,8 @@
     if (d.first) { tags += '<span class="tag first">Eerste bericht</span>'; el.classList.add('hl-first'); }
     if (isNewAcc(d.userId)) tags += NEWACC_TAG;
     if (d.bits) { tags += '<span class="tag bits">💎 ' + d.bits + ' bits</span>'; el.classList.add('hl-bits'); }
+    if (d.reward === 'reward') tags += '<span class="tag points" title="Ingewisseld met kanaalpunten">🎁 Kanaalpunten</span>';
+    if (d.reward === 'highlight') { tags += '<span class="tag points" title="Gemarkeerd met kanaalpunten">🎁 Gemarkeerd</span>'; el.classList.add('hl-points'); }
     el.innerHTML = (d.replyName ? '<div class="rctx">↩ Antwoord op <b>@' + esc(d.replyName) + '</b>: ' + esc(d.replyBody) + '</div>' : '') +
       (d.id && !d.own ? '<button class="rbtn" title="Antwoorden op dit bericht">↩</button>' : '') +
       '<span class="time">' + hhmm(t) + '</span>' +
@@ -2643,7 +2657,12 @@
         else { esub.session = m.payload.session.id; esub.subs = {}; esubSync(); }
         renderEsubState();
       } else if (t === 'session_reconnect') esubConnect(m.payload.session.reconnect_url);
-      else if (t === 'notification') onModEvent(m.payload.subscription.type, m.payload.event);
+      else if (t === 'notification') {
+        const ty = m.payload.subscription.type;
+        if (ty.startsWith('channel.poll.')) onPoll(ty, m.payload.event);
+        else if (ty.startsWith('channel.channel_points')) onRedeem(m.payload.event);
+        else onModEvent(ty, m.payload.event);
+      }
       else if (t === 'revocation') { delete esub.subs[m.payload.subscription.condition.broadcaster_user_id]; renderEsubState(); }
     };
     ws.onclose = () => {
@@ -2673,6 +2692,15 @@
         }
         esub.subs[bid] = 'ok';
       } catch (e) { esub.subs[bid] = 'fout'; esub.err = e.message; }
+      // polls en kanaalpunten geeft Twitch alleen aan de streamer zelf, dus alleen in je eigen kanaal
+      if (bid === state.me.user_id) {
+        for (const type of ['channel.poll.begin', 'channel.poll.progress', 'channel.poll.end', 'channel.channel_points_custom_reward_redemption.add']) {
+          try {
+            await helix('POST', 'eventsub/subscriptions', null, { type, version: '1',
+              condition: { broadcaster_user_id: bid }, transport: { method: 'websocket', session_id: session } });
+          } catch {}
+        }
+      }
     }
     renderEsubState();
   }
@@ -2708,6 +2736,34 @@
     if (/term$/.test(base)) what += (o.terms || []).join(', ');
     if (a !== base) what += ' (gedeelde chat)';
     return [/raid$/.test(base) ? '' : (o.user_login || ''), what];
+  }
+
+  // poll als blok in de chat dat meeloopt met de stemmen
+  const polls = {};
+  function onPoll(type, ev) {
+    const ch = ev.broadcaster_user_login, z = zoneEls[ch];
+    if (!z) return;
+    let el = polls[ev.id];
+    if (!el || !el.isConnected) { el = polls[ev.id] = document.createElement('div'); el.className = 'msg poll'; appendTo(z, el); }
+    const ch2 = ev.choices || [], tot = ch2.reduce((a, c) => a + (c.votes || 0), 0);
+    const max = Math.max(0, ...ch2.map((c) => c.votes || 0));
+    const done = type === 'channel.poll.end';
+    const left = !done && ev.ends_at ? Math.max(0, Math.round((Date.parse(ev.ends_at) - Date.now()) / 1000)) : 0;
+    el.classList.toggle('live', !done);
+    el.innerHTML = '<div class="poll-h">📊 Poll' + (done ? (ev.status === 'terminated' || ev.status === 'completed' ? ' afgelopen' : ' gestopt') : '') + ': <b>' + esc(ev.title) + '</b>' +
+      '<span class="poll-t">' + tot + ' stem' + (tot === 1 ? '' : 'men') + (left ? ' · nog ' + fmtDur(left) : '') + '</span></div>' +
+      ch2.map((c) => {
+        const v = c.votes || 0, pct = tot ? Math.round(v * 100 / tot) : 0;
+        return '<div class="poll-c' + (done && v === max && max ? ' win' : '') + '"><span class="poll-bar" style="width:' + pct + '%"></span><span class="poll-l">' + esc(c.title) + '</span><span class="poll-v">' + pct + '% (' + v + ')</span></div>';
+      }).join('');
+    if (z.stick) z.msgs.scrollTop = z.msgs.scrollHeight;
+  }
+  function onRedeem(ev) {
+    const ch = ev.broadcaster_user_login;
+    const rw = ev.reward || {};
+    addEvent(ch, '🎁 ' + ev.user_name + ' wisselde in: ' + (rw.title || 'beloning') + (rw.cost ? ' (' + rw.cost.toLocaleString('nl-NL') + ' punten)' : ''), ev.user_input || '', '', ev.user_id);
+    const z = zoneEls[ch];
+    if (z && z.msgs.lastElementChild) z.msgs.lastElementChild.classList.add('redeem');
   }
 
   function onModEvent(type, ev) {
@@ -3075,6 +3131,18 @@
   const seenDemo = new Set();
   function startDemo(zone) {
     setTimeout(() => addSys('demo', 'Demochat: berichten zijn nep en acties gebeuren alleen hier.'));
+    // voorbeeld van een poll en kanaalpunten
+    const pe = { id: 'demopoll', broadcaster_user_login: 'demo', title: 'Welke map spelen we?', ends_at: new Date(Date.now() + 120000).toISOString(),
+      choices: [{ title: 'Erangel', votes: 0 }, { title: 'Miramar', votes: 0 }, { title: 'Sanhok', votes: 0 }] };
+    setTimeout(() => onPoll('channel.poll.begin', pe), 3000);
+    let pv = 0;
+    const pT = setInterval(() => {
+      if (!zone.root.isConnected && !document.body.contains(zone.msgs)) return;
+      pe.choices[Math.floor(Math.random() * 3)].votes += 1 + Math.floor(Math.random() * 3);
+      if (++pv >= 12) { clearInterval(pT); pe.status = 'completed'; return onPoll('channel.poll.end', pe); }
+      onPoll('channel.poll.progress', pe);
+    }, 2500);
+    setTimeout(() => onRedeem({ broadcaster_user_login: 'demo', user_name: 'GamerGirl_NL', user_id: 'gamergirl_nl', user_input: 'Doe een dansje!', reward: { title: 'Verzoekje', cost: 500 } }), 6000);
     let n = 0;
     zone.demoT = setInterval(() => {
       const u = DEMO_USERS[Math.floor(Math.random() * DEMO_USERS.length)];
@@ -3084,7 +3152,7 @@
       const first = !seenDemo.has(u) && Math.random() < .3;
       seenDemo.add(u);
       addMsg('demo', { id: 'demo' + n++, userId: u.toLowerCase(), user: u.toLowerCase(), name: u, text: n % 17 === 0 ? '@jij kun je even kijken?' : text, emotes,
-        badges: u === 'Bram' ? 'vip/1' : (n % 3 ? '' : 'subscriber/1'), first, bits: n % 13 === 0 ? 100 : 0 });
+        badges: u === 'Bram' ? 'vip/1' : (n % 3 ? '' : 'subscriber/1'), first, bits: n % 13 === 0 ? 100 : 0, reward: n % 19 === 5 ? 'highlight' : '' });
     }, 1400);
   }
 
