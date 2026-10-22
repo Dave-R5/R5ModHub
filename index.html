@@ -185,6 +185,11 @@
   .ul-u:hover { background: #26262c; }
   .mychans { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 0 6px; }
   .mychans .hint { color: var(--muted); font-size: 13px; }
+  .welcome { flex-basis: 100%; max-width: 640px; background: var(--panel); border: 1px solid #4b3a75; border-radius: 10px; padding: 16px 18px; }
+  .welcome h2 { margin: 0 0 6px; font-size: 18px; }
+  .welcome p { margin: 0 0 12px; color: var(--muted); }
+  .welcome .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .welcome .more { margin: 12px 0 0; font-size: 12px; }
   .mychan { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-width: 120px; min-height: 1.5cm;
     padding: 6px 12px; text-align: left; touch-action: manipulation; }
   .mychan .mc-name { font-weight: 600; }
@@ -1999,7 +2004,7 @@
       box.appendChild(b);
     };
     const liveOf = (login) => Object.values(myChans.live).find((st) => st.user_login === login);
-    if (!state.me) hint('Log in (⚙) om hier knoppen te krijgen voor de kanalen waar je mod bent.');
+    if (!state.me) box.appendChild(welcomeEl());
     else if (myChans.err) hint('Kanalen laden mislukt: ' + esc(myChans.err) + '. Log opnieuw in via ⚙ na deze update.');
     else if (!myChans.list) hint('Kanalen waar je mod bent worden geladen…');
     else [...myChans.list].sort((a, b) => (!!myChans.live[b.broadcaster_id] - !!myChans.live[a.broadcaster_id]) || a.broadcaster_login.localeCompare(b.broadcaster_login))
@@ -2011,6 +2016,27 @@
     add.onclick = addExtraChan;
     box.appendChild(add);
     return box;
+  }
+
+  // welkomstblok in Hoofd zolang je niet bent ingelogd
+  function welcomeEl() {
+    const w = document.createElement('div');
+    w.className = 'welcome';
+    w.innerHTML = '<h2>👋 Welkom bij R5 ModHub</h2>' +
+      '<p>Modereer alle kanalen waar je mod bent vanuit één scherm: chats, streams, kijkers en je eigen sneltoetsen. Log in met Twitch, dan verschijnen hier knoppen voor jouw kanalen.</p>' +
+      '<div class="row"><button class="primary" data-w="login">Inloggen met Twitch</button><button data-w="demo">Probeer de demo</button><button data-w="help">❓ Wat kan R5 ModHub?</button></div>' +
+      '<p class="more">Meer info vind je altijd via ❓ rechtsboven.</p>';
+    w.querySelector('[data-w=login]').onclick = login;
+    w.querySelector('[data-w=help]').onclick = () => $('#helpBtn').click();
+    w.querySelector('[data-w=demo]').onclick = () => {
+      let t = state.tabs.find((x) => x.channel === 'demo');
+      if (t) return switchTab(t.id);
+      t = { id: 't' + Date.now().toString(36), name: 'Demo', channel: 'demo', zones: [] };
+      state.tabs.push(t); saveTabs();
+      switchTab(t.id);
+      addZone('demo', 'chat');
+    };
+    return w;
   }
 
   function openChannelTab(login, name) {
