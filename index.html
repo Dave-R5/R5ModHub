@@ -79,7 +79,8 @@
   .gbox { flex: 1; min-height: 0; position: relative; }
   .gbox svg { position: absolute; inset: 0; width: 100%; height: 100%; }
   .gbox svg text { fill: var(--muted); font-size: 11px; }
-  .rq-slot { flex: 1; min-height: 0; background: #0e0e10; }
+  /* onderaan een strook vrij, zodat de hoek om te vergroten niet onder de wachtrij van de app valt */
+  .rq-slot { flex: 1; min-height: 0; margin-bottom: 16px; background: #0e0e10; }
   .gsum { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 4px 8px 6px; font-size: 12px; color: var(--muted); }
   .gsum:empty { display: none; }
   .gsum b { color: #f5b942; font-weight: 600; }
@@ -667,6 +668,12 @@
       <summary><span class="hi">📜</span>Changelog<small>wat is er veranderd</small></summary>
       <div class="cl">
         <details class="cl-ver" open>
+          <summary>Nieuw sinds 1.6.0 <small>23 okt 2026</small></summary>
+          <ul>
+            <li><b>Beloningsverzoeken</b> (app): ⟳-knop om de wachtrij te vernieuwen, en het blok is weer kleiner te maken via de hoek rechtsonder.</li>
+          </ul>
+        </details>
+        <details class="cl-ver">
           <summary>Versie 1.6.0 <small>23 okt 2026</small></summary>
           <ul>
             <li><b>Beloningsverzoeken</b>: nieuw blok (via + Zone of ✎ op een tabblad) met de wachtrij met kanaalpuntenverzoeken van Twitch. In de Windows-app (vanaf 1.6.0) staat de wachtrij direct in het blok, in de browser opent een knop hem in een eigen venster.</li>
@@ -1911,8 +1918,17 @@
   // Windows-app: de wachtrij-weergave van de app op de plek van het blok houden (verborgen als het
   // blok niet te zien is of als er een venster als Instellingen openstaat, want die ligt eronder)
   const rqShown = {};
+  // tijdens slepen of vergroten van blokken de wachtrij even weg, anders pakt hij de muis af
+  let rqDrag = false;
+  document.addEventListener('pointerdown', (e) => {
+    const z = e.target.closest && e.target.closest('.zone');
+    if (z && (z.classList.contains('rewards') || e.target.closest('.zone-head'))) rqDrag = true;
+  }, true);
+  const rqDrop = () => { rqDrag = false; };
+  document.addEventListener('pointerup', rqDrop, true);
+  window.addEventListener('blur', rqDrop);
   function syncRewards() {
-    const modal = !!document.querySelector('.modal-bg.open, #picker:not([hidden])');
+    const modal = rqDrag || !!document.querySelector('.modal-bg.open, #picker:not([hidden])');
     Object.values(zoneEls).forEach((z) => {
       if (!z.rqSlot) return;
       const s = z.rqSlot;
@@ -1973,6 +1989,11 @@
     const zone = makeShell(z, '🎁 Beloningen ' + z.channel, '');
     const url = 'https://www.twitch.tv/popout/' + encodeURIComponent(z.channel) + '/reward-queue';
     if (window.r5app && window.r5app.rewardsShow && z.channel !== 'demo') {
+      // ⟳: de weergave sluiten; syncRewards opent hem meteen opnieuw (werkt ook met app 1.6.0)
+      const rl = document.createElement('button');
+      rl.className = 'icon'; rl.title = 'Wachtrij vernieuwen'; rl.textContent = '⟳';
+      rl.onclick = (e) => { e.stopPropagation(); window.r5app.rewardsClose(z.channel); delete rqShown[z.channel]; };
+      zone.root.querySelector('[data-act=open]').before(rl);
       zone.rqSlot = document.createElement('div');
       zone.rqSlot.className = 'rq-slot';
       zone.root.appendChild(zone.rqSlot);
