@@ -79,6 +79,7 @@
   .gbox { flex: 1; min-height: 0; position: relative; }
   .gbox svg { position: absolute; inset: 0; width: 100%; height: 100%; }
   .gbox svg text { fill: var(--muted); font-size: 11px; }
+  .rq-slot { flex: 1; min-height: 0; background: #0e0e10; }
   .gsum { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 4px 8px 6px; font-size: 12px; color: var(--muted); }
   .gsum:empty { display: none; }
   .gsum b { color: #f5b942; font-weight: 600; }
@@ -643,7 +644,7 @@
       <ul>
         <li><b>📋 Modlog</b>: modacties van alle mods in jouw kanalen, met wie het deed. Doorzoekbaar per kanaal.</li>
         <li><b>🔔 Meldingen</b> als een kanaal live gaat of als iemand jou noemt (aan te zetten in ⚙).</li>
-        <li><b>Beloningsverzoeken</b>: blok per kanaal dat de wachtrij van Twitch opent in een eigen venster (goedkeuren of weigeren als mod).</li>
+        <li><b>Beloningsverzoeken</b>: blok per kanaal met de wachtrij van Twitch (goedkeuren of weigeren als mod). In de Windows-app staat hij in het blok, in de browser opent hij in een eigen venster.</li>
         <li><b>Kijkersgrafiek</b> met export naar Excel (CSV). De streamkop toont live-tijd en kijkers.</li>
       </ul>
     </details>
@@ -666,9 +667,9 @@
       <summary><span class="hi">📜</span>Changelog<small>wat is er veranderd</small></summary>
       <div class="cl">
         <details class="cl-ver" open>
-          <summary>Nieuw sinds 1.5.5 <small>22 okt 2026</small></summary>
+          <summary>Versie 1.6.0 <small>23 okt 2026</small></summary>
           <ul>
-            <li><b>Beloningsverzoeken</b>: nieuw blok (via + Zone of ✎ op een tabblad) met een knop die de wachtrij met kanaalpuntenverzoeken van Twitch opent in een eigen venster.</li>
+            <li><b>Beloningsverzoeken</b>: nieuw blok (via + Zone of ✎ op een tabblad) met de wachtrij met kanaalpuntenverzoeken van Twitch. In de Windows-app (vanaf 1.6.0) staat de wachtrij direct in het blok, in de browser opent een knop hem in een eigen venster.</li>
           </ul>
         </details>
         <details class="cl-ver">
@@ -1907,6 +1908,30 @@
   }
   requestAnimationFrame(syncPlayers);
 
+  // Windows-app: de wachtrij-weergave van de app op de plek van het blok houden (verborgen als het
+  // blok niet te zien is of als er een venster als Instellingen openstaat, want die ligt eronder)
+  const rqShown = {};
+  function syncRewards() {
+    const modal = !!document.querySelector('.modal-bg.open, #picker:not([hidden])');
+    Object.values(zoneEls).forEach((z) => {
+      if (!z.rqSlot) return;
+      const s = z.rqSlot;
+      let r = { x: 0, y: 0, w: 0, h: 0 };
+      if (!modal && s.isConnected && s.offsetParent !== null && !(document.getElementById('zones').hidden && s.closest('#zones'))) {
+        const b = s.getBoundingClientRect(), a = (s.closest('#zones') || s.closest('#mview') || document.body).getBoundingClientRect();
+        const x1 = Math.max(b.left, a.left), y1 = Math.max(b.top, a.top), x2 = Math.min(b.right, a.right), y2 = Math.min(b.bottom, a.bottom);
+        if (x2 > x1 && y2 > y1) r = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+      }
+      const k = [r.x, r.y, r.w, r.h].map(Math.round).join(',');
+      if (rqShown[z.channel] === k) return;
+      rqShown[z.channel] = k;
+      window.r5app.rewardsShow(z.channel, r);
+    });
+    Object.keys(rqShown).forEach((ch) => { if (!zoneEls['rewards:' + ch]) { delete rqShown[ch]; window.r5app.rewardsClose(ch); } });
+    requestAnimationFrame(syncRewards);
+  }
+  if (window.r5app && window.r5app.rewardsShow) requestAnimationFrame(syncRewards);
+
   function buildPad(z) {
     const zone = makeShell(z, 'Sneltoetsen', '');
     zone.root.insertAdjacentHTML('beforeend', '<div class="pad"></div>');
@@ -1943,13 +1968,21 @@
   }
   // Beloningsverzoeken: Twitch geeft de wachtrij via de API alleen aan de streamer en laat de pagina
   // niet inbouwen, dus een knop die Twitch' eigen wachtrij opent (daar ben je als mod ingelogd)
+  // In de Windows-app (vanaf 1.6.0) legt de app de wachtrij als losse weergave over het blok (syncRewards).
   function buildRewardsZone(z) {
     const zone = makeShell(z, '🎁 Beloningen ' + z.channel, '');
+    const url = 'https://www.twitch.tv/popout/' + encodeURIComponent(z.channel) + '/reward-queue';
+    if (window.r5app && window.r5app.rewardsShow && z.channel !== 'demo') {
+      zone.rqSlot = document.createElement('div');
+      zone.rqSlot.className = 'rq-slot';
+      zone.root.appendChild(zone.rqSlot);
+      return zone;
+    }
     zone.root.insertAdjacentHTML('beforeend', '<div class="player-off">Verzoeken voor kanaalpunten van ' + esc(z.channel) +
       ' goedkeuren of weigeren doe je in de wachtrij van Twitch.<br><br><button class="primary">🎁 Open wachtrij</button>' +
-      '<p class="hint">Opent in een eigen venster. Je moet bij Twitch ingelogd zijn en mod zijn van dit kanaal.</p></div>');
-    zone.root.querySelector('.player-off button').onclick = () =>
-      window.open('https://www.twitch.tv/popout/' + encodeURIComponent(z.channel) + '/reward-queue', 'rq-' + z.channel, 'width=460,height=760');
+      '<p class="hint">Opent in een eigen venster. Je moet bij Twitch ingelogd zijn en mod zijn van dit kanaal.' +
+      (window.r5app ? ' Werk de app bij naar 1.6.0 om de wachtrij hier in het blok te zien.' : ' In de Windows-app staat de wachtrij direct in dit blok.') + '</p></div>');
+    zone.root.querySelector('.player-off button').onclick = () => window.open(url, 'rq-' + z.channel, 'width=460,height=760');
     return zone;
   }
   function buildModlogZone(z) {

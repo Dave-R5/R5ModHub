@@ -1,6 +1,6 @@
 // R5 ModHub desktop-app: een venster dat de live site laadt.
 // Updates van de site komen dus vanzelf mee; de app zelf werkt zich bij via GitHub-releases.
-const { app, BrowserWindow, shell, Menu, ipcMain, session, dialog } = require('electron');
+const { app, BrowserWindow, WebContentsView, shell, Menu, ipcMain, session, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const http = require('http');
@@ -271,6 +271,7 @@ function createWindow() {
     if (url.startsWith('https://id.twitch.tv/oauth2/authorize')) startLogin(url);
     else shell.openExternal(url);
   });
+  win.webContents.on('did-start-navigation', (d) => { if (d.isMainFrame && !d.isSameDocument) closeAllRq(); });
   win.webContents.on('did-fail-load', (_e, code, desc, url, isMain) => {
     if (!isMain || code === -3) return;
     win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(
@@ -294,6 +295,36 @@ Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: 'Volledig uitloggen bij Twitch (ook de speler)', click: logoutAll },
   ] },
 ]));
+
+// Beloningswachtrij als blok: Twitch laat de pagina niet inbouwen in een andere site, dus de app legt
+// een eigen, losse weergave van twitch.tv over het blok heen. De site geeft door waar het blok staat.
+const rq = new Map(); // kanaal -> WebContentsView
+const okChan = (c) => typeof c === 'string' && /^[a-z0-9_]{1,25}$/.test(c);
+ipcMain.on('r5:rq-show', (e, ch, r) => {
+  if (!fromSite(e) || !win || !okChan(ch) || !r) return;
+  let v = rq.get(ch);
+  if (!v) {
+    v = new WebContentsView({ webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } });
+    v.setBackgroundColor('#0e0e10');
+    v.webContents.setUserAgent(chromeUA(v));
+    v.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+    v.webContents.loadURL('https://www.twitch.tv/popout/' + ch + '/reward-queue');
+    win.contentView.addChildView(v);
+    rq.set(ch, v);
+  }
+  const z = win.webContents.getZoomFactor();
+  v.setBounds({ x: Math.round(r.x * z), y: Math.round(r.y * z), width: Math.max(0, Math.round(r.w * z)), height: Math.max(0, Math.round(r.h * z)) });
+  v.setVisible(r.w > 0 && r.h > 0);
+});
+ipcMain.on('r5:rq-close', (e, ch) => {
+  if (!fromSite(e) || !win) return;
+  const v = rq.get(ch);
+  if (!v) return;
+  win.contentView.removeChildView(v);
+  v.webContents.close();
+  rq.delete(ch);
+});
+const closeAllRq = () => { rq.forEach((v) => { try { win.contentView.removeChildView(v); v.webContents.close(); } catch {} }); rq.clear(); };
 
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
 app.whenReady().then(() => {
