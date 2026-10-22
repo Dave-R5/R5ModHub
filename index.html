@@ -402,6 +402,7 @@
       <option value="users">Alleen kijkerslijst</option>
       <option value="modlog">Modlog van dit kanaal</option>
       <option value="graph">Kijkersgrafiek</option>
+      <option value="rewards">Beloningsverzoeken (wachtrij)</option>
     </select>
     <div id="zoneNameWrap">
     <label for="zoneName">Kanaalnaam (zoals in twitch.tv/<b>naam</b>)</label>
@@ -642,6 +643,7 @@
       <ul>
         <li><b>📋 Modlog</b>: modacties van alle mods in jouw kanalen, met wie het deed. Doorzoekbaar per kanaal.</li>
         <li><b>🔔 Meldingen</b> als een kanaal live gaat of als iemand jou noemt (aan te zetten in ⚙).</li>
+        <li><b>Beloningsverzoeken</b>: blok per kanaal dat de wachtrij van Twitch opent in een eigen venster (goedkeuren of weigeren als mod).</li>
         <li><b>Kijkersgrafiek</b> met export naar Excel (CSV). De streamkop toont live-tijd en kijkers.</li>
       </ul>
     </details>
@@ -664,6 +666,12 @@
       <summary><span class="hi">📜</span>Changelog<small>wat is er veranderd</small></summary>
       <div class="cl">
         <details class="cl-ver" open>
+          <summary>Nieuw sinds 1.5.5 <small>22 okt 2026</small></summary>
+          <ul>
+            <li><b>Beloningsverzoeken</b>: nieuw blok (via + Zone of ✎ op een tabblad) met een knop die de wachtrij met kanaalpuntenverzoeken van Twitch opent in een eigen venster.</li>
+          </ul>
+        </details>
+        <details class="cl-ver">
           <summary>Versie 1.5.5 <small>22 okt 2026</small></summary>
           <ul>
             <li><b>Emotekiezer</b>: je Twitch-emotes staan per kanaal, met het kanaal waarin je chat bovenaan. Emotes van hetzelfde kanaal staan nu in één groep.</li>
@@ -1116,7 +1124,7 @@
   }
 
   // ✎ op een tabblad: naam en per blok een schakelaar
-  const TE_KINDS = [['stream', '📺 Stream'], ['chat', '💬 Chat'], ['users', '👥 Kijkers'], ['graph', '📈 Kijkersgrafiek'], ['modlog', '📋 Modlog']];
+  const TE_KINDS = [['stream', '📺 Stream'], ['chat', '💬 Chat'], ['users', '👥 Kijkers'], ['graph', '📈 Kijkersgrafiek'], ['modlog', '📋 Modlog'], ['rewards', '🎁 Beloningsverzoeken']];
   function openTabEdit(id) {
     if (state.tab !== id) switchTab(id);
     const t = curTab();
@@ -1201,9 +1209,9 @@
   // Een chatzone per kanaal; staat hetzelfde kanaal in meerdere tabbladen,
   // dan verhuist dezelfde zone mee naar het tabblad dat open is.
   const zoneEls = {};
-  const keyOf = (z) => z.kind === 'buttons' ? 'buttons' : (['stream', 'users', 'modlog', 'graph'].includes(z.kind) ? z.kind + ':' : '') + z.channel;
+  const keyOf = (z) => z.kind === 'buttons' ? 'buttons' : (['stream', 'users', 'modlog', 'graph', 'rewards'].includes(z.kind) ? z.kind + ':' : '') + z.channel;
   const buildAny = (z) => z.kind === 'stream' ? buildStream(z) : z.kind === 'buttons' ? buildPad(z) : z.kind === 'users' ? buildUsers(z)
-    : z.kind === 'modlog' ? buildModlogZone(z) : z.kind === 'graph' ? buildGraphZone(z) : buildZone(z);
+    : z.kind === 'modlog' ? buildModlogZone(z) : z.kind === 'graph' ? buildGraphZone(z) : z.kind === 'rewards' ? buildRewardsZone(z) : buildZone(z);
 
   function renderZones() {
     const wrap = $('#zones');
@@ -1932,6 +1940,17 @@
     const day = new Date().toDateString() === d.toDateString() ? '' : d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) + ' ';
     return '<div class="ml-row"><span class="time">' + day + hhmm(d) + '</span><span class="what">' + (x.mod ? '<span class="mod">' + esc(x.mod) + '</span> → ' : '') +
       (x.user ? '<b>' + esc(x.user) + '</b>: ' : '') + esc(x.what) + '</span>' + (withCh ? '<span class="ch">' + esc(x.ch) + '</span>' : '') + '</div>';
+  }
+  // Beloningsverzoeken: Twitch geeft de wachtrij via de API alleen aan de streamer en laat de pagina
+  // niet inbouwen, dus een knop die Twitch' eigen wachtrij opent (daar ben je als mod ingelogd)
+  function buildRewardsZone(z) {
+    const zone = makeShell(z, '🎁 Beloningen ' + z.channel, '');
+    zone.root.insertAdjacentHTML('beforeend', '<div class="player-off">Verzoeken voor kanaalpunten van ' + esc(z.channel) +
+      ' goedkeuren of weigeren doe je in de wachtrij van Twitch.<br><br><button class="primary">🎁 Open wachtrij</button>' +
+      '<p class="hint">Opent in een eigen venster. Je moet bij Twitch ingelogd zijn en mod zijn van dit kanaal.</p></div>');
+    zone.root.querySelector('.player-off button').onclick = () =>
+      window.open('https://www.twitch.tv/popout/' + encodeURIComponent(z.channel) + '/reward-queue', 'rq-' + z.channel, 'width=460,height=760');
+    return zone;
   }
   function buildModlogZone(z) {
     const zone = makeShell(z, '📋 Modlog ' + z.channel, '');
