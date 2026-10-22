@@ -662,7 +662,7 @@
         <details class="cl-ver" open>
           <summary>Nieuw sinds 1.5.0 <small>22 okt 2026</small></summary>
           <ul>
-            <li><b>Emotekiezer</b>: je Twitch-emotes staan per kanaal, met het kanaal waarin je chat bovenaan.</li>
+            <li><b>Emotekiezer</b>: je Twitch-emotes staan per kanaal, met het kanaal waarin je chat bovenaan. Emotes van hetzelfde kanaal staan nu in één groep.</li>
             <li><b>Probeer de demo</b> opent nu de volledige demo met stream, chat, knoppen, modlog en kijkers.</li>
           </ul>
         </details>
@@ -2641,11 +2641,11 @@
     const groups = [
       ['Jouw 7TV-emotes', state.me && stv.personal[state.me.user_id]],
       ['7TV ' + ch, emo.stvChan[ch]], ['BTTV ' + ch, emo.bttvChan[ch]], ['FFZ ' + ch, emo.ffzChan[ch]],
-      // jouw Twitch-emotes per kanaal: eerst dit kanaal, dan de rest op naam, als laatste de algemene
-      ...Object.entries(emo.twUserBy).map(([id, m]) => [id, m, emo.twOwners[id]]).sort((a, b) =>
-        (!a[2] - !b[2]) || ((b[2] && b[2].login === ch) - (a[2] && a[2].login === ch)) || ((a[2] || {}).name || '').localeCompare((b[2] || {}).name || ''))
-        .map(([, m, o]) => [o ? 'Jouw emotes: ' + o.name : 'Jouw overige Twitch-emotes', m]),
-      ['Twitch ' + ch, emo.twChan[ch]],
+      // Twitch-emotes van dit kanaal (kanaal + jouw eigen) samen in één groep, dan jouw emotes van andere kanalen op naam
+      ['Twitch ' + ((emo.twOwners[idCache[ch]] || {}).name || ch), Object.assign({}, emo.twUserBy[idCache[ch]], emo.twChan[ch])],
+      ...Object.entries(emo.twUserBy).filter(([id]) => id !== idCache[ch]).map(([id, m]) => [m, emo.twOwners[id]])
+        .sort((a, b) => (!a[1] - !b[1]) || ((a[1] || {}).name || '').localeCompare((b[1] || {}).name || ''))
+        .map(([m, o]) => [o ? 'Twitch ' + o.name : 'Jouw overige Twitch-emotes', m]),
       ['Twitch algemeen', emo.twGlobal], ['7TV algemeen', emo.stvGlobal], ['BTTV algemeen', emo.bttvGlobal], ['FFZ algemeen', emo.ffzGlobal],
     ].filter(([, m]) => m && Object.keys(m).length);
     pk.innerHTML = '<input class="pk-search" placeholder="Zoek emote…" autocomplete="off"><div class="pk-body"></div>';
