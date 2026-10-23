@@ -128,6 +128,8 @@
   .zone-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--line);
     cursor: grab; user-select: none; background: var(--panel2); }
   .zone-head .name { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .zone.stream .zone-head .name { flex: 0 1 auto; }
+  .zone-head .game { flex: 1; min-width: 0; color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .zone-head .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
   .zone-head .dot.live { background: var(--ok); }
   .msgs { flex: 1; overflow-y: auto; padding: 4px 0; }
@@ -712,6 +714,7 @@
         <details class="cl-ver" open>
           <summary>Nieuw sinds 1.8.0 <small>23 okt 2026</small></summary>
           <ul>
+            <li><b>Stream</b>: in de kop van het streamblok staat nu de huidige game naast de kanaalnaam.</li>
             <li><b>Beloningsverzoeken</b> (app): de wachtrij verdwijnt als je een stream op volledig scherm zet en komt terug als je dat weer uitzet.</li>
           </ul>
         </details>
@@ -2059,20 +2062,22 @@
     }));
   }
   function buildStream(z) {
-    const zone = makeShell(z, '▶ ' + z.channel, '<span class="uptime" title="Hoelang live"></span><span class="vcount" title="Kijkers nu"></span>');
+    const zone = makeShell(z, '▶ ' + z.channel, '<span class="game" title="Huidige game"></span><span class="uptime" title="Hoelang live"></span><span class="vcount" title="Kijkers nu"></span>');
     zone.dot.classList.add('live');
     // hoelang live: begintijd elke minuut bij Twitch ophalen, de teller loopt elke seconde
-    const up = zone.root.querySelector('.uptime'), vc = zone.root.querySelector('.vcount');
+    const up = zone.root.querySelector('.uptime'), vc = zone.root.querySelector('.vcount'), gm = zone.root.querySelector('.game');
     zone.poll = async () => {
-      if (z.channel === 'demo') { zone.started = zone.started || Date.now() - 3725000; zone.vnow = 184; }
+      if (z.channel === 'demo') { zone.started = zone.started || Date.now() - 3725000; zone.vnow = 184; zone.game = 'Just Chatting'; }
       else if (state.me) {
         try {
           const st = (await helix('GET', 'streams', { user_login: z.channel })).data[0];
-          zone.started = st ? Date.parse(st.started_at) : 0; zone.vnow = st ? st.viewer_count : null;
+          zone.started = st ? Date.parse(st.started_at) : 0; zone.vnow = st ? st.viewer_count : null; zone.game = st ? st.game_name || '' : '';
           if (st) recordViewers(z.channel, st.viewer_count, st.game_name);
         } catch {}
       }
       vc.textContent = zone.started && zone.vnow != null ? '👁 ' + zone.vnow.toLocaleString('nl-NL') : '';
+      gm.textContent = zone.started && zone.game ? '· ' + zone.game : '';
+      gm.title = zone.game ? 'Huidige game: ' + zone.game : '';
       zone.dot.classList.toggle('live', !!zone.started || !state.me);
     };
     const tick = () => {
