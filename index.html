@@ -715,6 +715,7 @@
           <summary>Nieuw sinds 1.8.0 <small>23 okt 2026</small></summary>
           <ul>
             <li><b>Stream</b>: in de kop van het streamblok staat nu de huidige game naast de kanaalnaam.</li>
+            <li><b>Kijkersgrafiek</b>: een gamewissel komt nu binnen een minuut in de grafiek (Twitch gaf de nieuwe game soms pas veel later door).</li>
             <li><b>Beloningsverzoeken</b> (app): de wachtrij verdwijnt als je een stream op volledig scherm zet en komt terug als je dat weer uitzet.</li>
           </ul>
         </details>
@@ -2011,9 +2012,20 @@
 
   // ---------- kijkersgrafiek (huidige stream, op dit apparaat bijgehouden) ----------
   const vhist = store.get('vhist', {});   // kanaal -> [[tijd, kijkers, game]]
+  // De game uit 'streams' loopt bij Twitch soms minuten achter na een wissel; 'channels' is
+  // meteen bij. Stream- en grafiekblok halen die op (freshGame) en die waarde gaat dan voor.
+  const chGame = {};   // kanaal -> [tijd, game] uit 'channels'
+  async function freshGame(ch, fallback) {
+    try {
+      const g = ((await helix('GET', 'channels', { broadcaster_id: await channelId(ch) })).data[0] || {}).game_name || '';
+      if (g) { chGame[ch] = [Date.now(), g]; return g; }
+    } catch {}
+    return fallback || '';
+  }
   function recordViewers(ch, v, game) {
     if (v == null) return;
     const a = vhist[ch] || (vhist[ch] = []), now = Date.now();
+    if (game && chGame[ch] && now - chGame[ch][0] < 3 * 60 * 1000) game = chGame[ch][1];
     // zonder game (bijv. uit de kijkerslijst) geldt de game van het vorige meetpunt
     const g = game || (a.length ? a[a.length - 1][2] : '') || '';
     if (a.length && now - a[a.length - 1][0] < 50000) { a[a.length - 1][1] = v; if (game) a[a.length - 1][2] = g; } else a.push([now, v, g]);
@@ -2071,7 +2083,7 @@
       else if (state.me) {
         try {
           const st = (await helix('GET', 'streams', { user_login: z.channel })).data[0];
-          zone.started = st ? Date.parse(st.started_at) : 0; zone.vnow = st ? st.viewer_count : null; zone.game = st ? st.game_name || '' : '';
+          zone.started = st ? Date.parse(st.started_at) : 0; zone.vnow = st ? st.viewer_count : null; zone.game = st ? await freshGame(z.channel, st.game_name) : '';
           if (st) recordViewers(z.channel, st.viewer_count, st.game_name);
         } catch {}
       }
@@ -2411,7 +2423,7 @@
         try {
           const st = await helix('GET', 'streams', { user_login: z.channel });
           zone.offline = !st.data.length;
-          if (st.data.length) recordViewers(z.channel, st.data[0].viewer_count, st.data[0].game_name);
+          if (st.data.length) recordViewers(z.channel, st.data[0].viewer_count, await freshGame(z.channel, st.data[0].game_name));
         } catch {}
       }
       zone.redraw();
