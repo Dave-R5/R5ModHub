@@ -715,6 +715,7 @@
           <summary>Nieuw sinds 1.8.0 <small>23 okt 2026</small></summary>
           <ul>
             <li><b>Stream</b>: in de kop van het streamblok staat nu de huidige game naast de kanaalnaam.</li>
+            <li><b>Beloningsverzoeken</b> (app): de wachtrij gaat niet meer over de gebruikerskaart, het chatmenu of de meldingen heen.</li>
             <li><b>Kijkersgrafiek</b>: een gamewissel komt nu binnen een minuut in de grafiek (Twitch gaf de nieuwe game soms pas veel later door).</li>
             <li><b>Beloningsverzoeken</b> (app): de wachtrij verdwijnt als je een stream op volledig scherm zet en komt terug als je dat weer uitzet.</li>
           </ul>
@@ -2183,6 +2184,9 @@
   function syncRewards() {
     // verbergen tijdens slepen, een venster in de site of een stream op volledig scherm
     const modal = rqDrag || !!document.fullscreenElement || !!document.querySelector('.modal-bg.open, #picker:not([hidden])');
+    // gebruikerskaart, chatmenu en meldingen liggen in de site; de wachtrij van de app ligt daar
+    // altijd bovenop, dus verbergen zolang zo'n venster over het blok valt
+    const pops = [...document.querySelectorAll('#card:not([hidden]), #chatdd:not([hidden]), #bellDd:not([hidden])')].map((el) => el.getBoundingClientRect());
     Object.values(zoneEls).forEach((z) => {
       if (!z.rqSlot) return;
       const s = z.rqSlot;
@@ -2190,7 +2194,7 @@
       if (!modal && s.isConnected && s.offsetParent !== null && !(document.getElementById('zones').hidden && s.closest('#zones'))) {
         const b = s.getBoundingClientRect(), a = (s.closest('#zones') || s.closest('#mview') || document.body).getBoundingClientRect();
         const x1 = Math.max(b.left, a.left), y1 = Math.max(b.top, a.top), x2 = Math.min(b.right, a.right), y2 = Math.min(b.bottom, a.bottom);
-        if (x2 > x1 && y2 > y1) r = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+        if (x2 > x1 && y2 > y1 && !pops.some((p) => p.left < x2 && p.right > x1 && p.top < y2 && p.bottom > y1)) r = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
       }
       const k = [r.x, r.y, r.w, r.h].map(Math.round).join(',');
       if (rqShown[z.channel] === k) return;
