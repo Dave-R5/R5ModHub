@@ -145,6 +145,10 @@
     background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,.5); padding: 4px 0; }
   .mention-dd .mdd-i { padding: 6px 10px; cursor: pointer; font-size: 14px; }
   .mention-dd .mdd-i.on, .mention-dd .mdd-i:hover { background: var(--accent); color: #fff; }
+  .mention-dd.cmd-dd { max-height: 50vh; overflow-y: auto; min-width: 260px; }
+  .cmd-dd .mdd-i { display: flex; flex-direction: column; gap: 1px; }
+  .cmd-dd .mdd-i i { font-style: normal; color: var(--muted); font-size: 12px; }
+  .cmd-dd .mdd-i.on i, .cmd-dd .mdd-i:hover i { color: #e6dcff; }
   .zone-foot { padding: 6px; border-top: 1px solid var(--line); display: flex; gap: 4px; align-items: center; }
   .emo-btn { font-size: 18px; padding: 2px 8px; }
   #picker { position: fixed; z-index: 15; max-height: 50vh; display: flex; flex-direction: column; background: var(--panel);
@@ -670,6 +674,7 @@
         <details class="cl-ver" open>
           <summary>Nieuw sinds 1.6.0 <small>23 okt 2026</small></summary>
           <ul>
+            <li><b>/-commando's</b>: typ / in de chat voor een lijst met alle commando's en uitleg (zoals /ban, /timeout, /slow, /announce, /shoutout, /warn). Ze werken nu echt; log één keer opnieuw in voor /announce, /shoutout en /warn.</li>
             <li><b>Kijkersgrafiek</b>: de raidstreep blijft nu ook na herladen staan, net als de gamestreep.</li>
             <li><b>Beloningsverzoeken</b> (app): ⟳-knop om de wachtrij te vernieuwen, en het blok is weer kleiner te maken via de hoek rechtsonder.</li>
           </ul>
@@ -807,7 +812,7 @@
   'use strict';
   const SCOPES = ['chat:read', 'chat:edit', 'moderator:manage:banned_users', 'moderator:manage:chat_messages', 'user:read:emotes', 'moderator:read:chatters', 'user:read:moderated_channels', 'moderation:read', 'channel:read:vips', 'moderator:manage:shield_mode', 'moderator:manage:chat_settings',
     'moderator:read:blocked_terms', 'moderator:read:unban_requests', 'moderator:read:warnings', 'moderator:read:moderators', 'moderator:read:vips',
-    'channel:read:polls', 'channel:read:redemptions'];
+    'channel:read:polls', 'channel:read:redemptions', 'moderator:manage:announcements', 'moderator:manage:shoutouts', 'moderator:manage:warnings'];
   const MAX_MSGS = 300;
   // Client ID van de gedeelde Twitch-app van deze site: hiermee kan iedereen direct inloggen.
   // Een Client ID is openbaar (geen wachtwoord), dus hij mag in de code staan.
@@ -1550,6 +1555,7 @@
     Object.assign(zone, { msgs, paused, input, stick: true, replyBar: root.querySelector('.replybar') });
     zone.replyBar.querySelector('button').onclick = () => setReply(zone, null);
     root.querySelector('.emo-btn').onclick = (e) => { e.stopPropagation(); togglePicker(z.channel, input); };
+    cmdBox(zone, root.querySelector('.zone-foot'), input);
     mentionBox(zone, root.querySelector('.zone-foot'), input);
 
     root.addEventListener('mousedown', () => setActive(z.channel));
@@ -1571,7 +1577,8 @@
       if (e.key === 'Escape' && zone.replyTo) { e.stopPropagation(); setReply(zone, null); return; }
       if (e.key === 'Enter' && input.value.trim()) {
         const t = input.value.trim();
-        sendChat(z.channel, t, zone.replyTo); input.value = ''; setReply(zone, null);
+        if (!runCommand(z.channel, t)) sendChat(z.channel, t, zone.replyTo);
+        input.value = ''; setReply(zone, null);
         if (zone.sent[zone.sent.length - 1] !== t) zone.sent.push(t);
         if (zone.sent.length > 50) zone.sent.shift();
         zone.hi = -1;
@@ -1595,6 +1602,125 @@
     zone.sent = []; zone.hi = -1;
     if (z.channel === 'demo') startDemo(zone); else loadHistory(zone);
     return zone;
+  }
+
+  // ---------- /-commando's ----------
+  // Twitch voert /ban, /timeout enz. niet meer uit als ze als chatbericht binnenkomen;
+  // daarom doet R5 ModHub ze zelf via de Twitch-API. Typ / voor de lijst met uitleg.
+  const durSec = (v, d) => { if (!v) return d; const m = String(v).match(/^(\d+)([smhdw]?)$/i); return m ? +m[1] * ({ s: 1, m: 60, h: 3600, d: 86400, w: 604800 }[(m[2] || 's').toLowerCase()]) : NaN; };
+  const COMMANDS = [
+    ['ban', '<naam> [reden]', 'Verban iemand permanent uit de chat.', (c, a) => banCmd(c, a[0], a.slice(1).join(' '), 0)],
+    ['unban', '<naam>', 'Haal een ban weg.', (c, a) => unbanCmd(c, a[0], 'unban')],
+    ['timeout', '<naam> [duur] [reden]', 'Tijdelijk niet laten chatten. Duur in seconden of bijv. 10m, 1h, 1d (standaard 10 minuten).', (c, a) => {
+      const d = durSec(a[1], 600);
+      return isNaN(d) ? banCmd(c, a[0], a.slice(1).join(' '), 600) : banCmd(c, a[0], a.slice(2).join(' '), d);
+    }],
+    ['untimeout', '<naam>', 'Haal een timeout weg.', (c, a) => unbanCmd(c, a[0], 'timeout weg')],
+    ['warn', '<naam> <reden>', 'Geef een waarschuwing; die moet de kijker bevestigen voor hij weer kan chatten.', async (c, a) => {
+      if (!a[1]) throw new Error('geef een reden op');
+      const [bid, uid] = await Promise.all([channelId(c), userIdOf(a[0])]);
+      await helix('POST', 'moderation/warnings', { broadcaster_id: bid, moderator_id: state.me.user_id }, { data: { user_id: uid, reason: a.slice(1).join(' ') } });
+      return [a[0], 'waarschuwing (' + a.slice(1).join(' ') + ')'];
+    }],
+    ['clear', '', 'Wis de hele chat voor iedereen.', async (c) => { await helix('DELETE', 'moderation/chat', { broadcaster_id: await channelId(c), moderator_id: state.me.user_id }); return ['', 'chat gewist']; }],
+    ['slow', '[seconden]', 'Slow-modus aan: kijkers moeten wachten tussen berichten (standaard 30 s).', (c, a) => chatSet(c, { slow_mode: true, slow_mode_wait_time: durSec(a[0], 30) }, 'slow-modus aan')],
+    ['slowoff', '', 'Slow-modus uit.', (c) => chatSet(c, { slow_mode: false }, 'slow-modus uit')],
+    ['followers', '[duur]', 'Alleen volgers mogen chatten, eventueel pas na een tijd volgen (bijv. 10m, 1d).', (c, a) => chatSet(c, { follower_mode: true, follower_mode_duration: Math.round(durSec(a[0], 0) / 60) }, 'alleen volgers aan')],
+    ['followersoff', '', 'Iedereen mag weer chatten (niet alleen volgers).', (c) => chatSet(c, { follower_mode: false }, 'alleen volgers uit')],
+    ['subscribers', '', 'Alleen abonnees mogen chatten.', (c) => chatSet(c, { subscriber_mode: true }, 'alleen abonnees aan')],
+    ['subscribersoff', '', 'Alleen-abonnees uit.', (c) => chatSet(c, { subscriber_mode: false }, 'alleen abonnees uit')],
+    ['emoteonly', '', 'Alleen emotes toegestaan.', (c) => chatSet(c, { emote_mode: true }, 'alleen emotes aan')],
+    ['emoteonlyoff', '', 'Alleen-emotes uit.', (c) => chatSet(c, { emote_mode: false }, 'alleen emotes uit')],
+    ['uniquechat', '', 'Hetzelfde bericht mag niet twee keer achter elkaar.', (c) => chatSet(c, { unique_chat_mode: true }, 'unieke chat aan')],
+    ['uniquechatoff', '', 'Unieke chat uit.', (c) => chatSet(c, { unique_chat_mode: false }, 'unieke chat uit')],
+    ['shield', '', 'Shield-modus aan (strengere instellingen tegen haataanvallen).', async (c) => { await helix('PUT', 'moderation/shield_mode', { broadcaster_id: await channelId(c), moderator_id: state.me.user_id }, { is_active: true }); return ['', 'Shield-modus aan']; }],
+    ['shieldoff', '', 'Shield-modus uit.', async (c) => { await helix('PUT', 'moderation/shield_mode', { broadcaster_id: await channelId(c), moderator_id: state.me.user_id }, { is_active: false }); return ['', 'Shield-modus uit']; }],
+    ['announce', '<bericht>', 'Plaats een opvallende mededeling in de chat.', async (c, a, raw) => {
+      if (!raw) throw new Error('typ een bericht');
+      await helix('POST', 'chat/announcements', { broadcaster_id: await channelId(c), moderator_id: state.me.user_id }, { message: raw.slice(0, 500) });
+      return null;
+    }],
+    ['shoutout', '<naam>', 'Geef een officiële shoutout aan een andere streamer (alleen als het kanaal live is).', async (c, a) => {
+      const [bid, uid] = await Promise.all([channelId(c), userIdOf(a[0])]);
+      await helix('POST', 'chat/shoutouts', { from_broadcaster_id: bid, to_broadcaster_id: uid, moderator_id: state.me.user_id });
+      return [a[0], 'shoutout'];
+    }],
+    ['me', '<tekst>', 'Bericht in schuine tekst (actie), zoals op Twitch.', (c, a, raw) => { sendChat(c, '\u0001ACTION ' + raw + '\u0001'); return null; }],
+    ['user', '<naam>', 'Open het kaartje van iemand (notities, modacties).', (c, a) => { window.open('https://www.twitch.tv/popout/' + c + '/viewercard/' + encodeURIComponent(a[0]), '_blank'); return null; }],
+  ];
+  async function userIdOf(name) {
+    const login = String(name || '').replace(/^@/, '').toLowerCase();
+    if (!login) throw new Error('geef een naam op');
+    const j = await helix('GET', 'users', { login });
+    if (!j.data.length) throw new Error(login + ' bestaat niet');
+    return j.data[0].id;
+  }
+  async function banCmd(c, name, reason, dur) {
+    const [bid, uid] = await Promise.all([channelId(c), userIdOf(name)]);
+    const data = { user_id: uid, reason: reason || '' };
+    if (dur) data.duration = dur;
+    await helix('POST', 'moderation/bans', { broadcaster_id: bid, moderator_id: state.me.user_id }, { data });
+    return [name.replace(/^@/, ''), (dur ? 'timeout ' + fmtDur(dur) : 'ban') + (reason ? ' (' + reason + ')' : '')];
+  }
+  async function unbanCmd(c, name, what) {
+    const [bid, uid] = await Promise.all([channelId(c), userIdOf(name)]);
+    await helix('DELETE', 'moderation/bans', { broadcaster_id: bid, moderator_id: state.me.user_id, user_id: uid });
+    return [name.replace(/^@/, ''), what];
+  }
+  async function chatSet(c, body, what) {
+    if (Object.values(body).some((v) => typeof v === 'number' && isNaN(v))) throw new Error('ongeldige duur');
+    await helix('PATCH', 'chat/settings', { broadcaster_id: await channelId(c), moderator_id: state.me.user_id }, body);
+    return ['', what];
+  }
+  // geeft true als de tekst een commando was (dan niet als chatbericht versturen)
+  function runCommand(ch, text) {
+    const m = text.match(/^\/(\w+)\s*([\s\S]*)$/);
+    if (!m) return false;
+    const cmd = COMMANDS.find((x) => x[0] === m[1].toLowerCase());
+    if (!cmd) { toast('Onbekend commando /' + m[1] + '. Typ / voor de lijst.', 'err'); return true; }
+    const raw = m[2].trim(), args = raw ? raw.split(/\s+/) : [];
+    if (/^</.test(cmd[1]) && !args.length) { toast('/' + cmd[0] + ' ' + cmd[1] + ': ' + cmd[2], 'err'); return true; }
+    if (ch === 'demo') { addSys('demo', '(demo) /' + cmd[0] + (raw ? ' ' + raw : '') + ' uitgevoerd'); return true; }
+    if (!state.me) { toast('Log in (⚙) om commando\'s te gebruiken.', 'err'); return true; }
+    Promise.resolve().then(() => cmd[3](ch, args, raw)).then((r) => {
+      if (!r) return;
+      toast((r[0] ? r[0] + ': ' : '') + r[1], 'ok');
+      addSys(ch, '/' + cmd[0] + ': ' + (r[0] ? r[0] + ' · ' : '') + r[1]);
+      logAction(ch, r[0], r[1]);
+    }).catch((e) => toast('/' + cmd[0] + ' mislukt: ' + e.message + (/scope|missing|token/i.test(e.message) ? ' (log opnieuw in via ⚙)' : ''), 'err'));
+    return true;
+  }
+  // keuzelijst als je met / begint: alle commando's met uitleg
+  function cmdBox(zone, foot, input) {
+    const box = document.createElement('div');
+    box.className = 'mention-dd cmd-dd'; box.hidden = true;
+    foot.appendChild(box);
+    let items = [], idx = 0;
+    const close = () => { box.hidden = true; items = []; };
+    const pick = (c) => { input.value = '/' + c[0] + ' '; input.setSelectionRange(input.value.length, input.value.length); input.focus(); close(); input.dispatchEvent(new Event('input')); };
+    const draw = () => {
+      box.innerHTML = items.map((c, i) => '<div class="mdd-i' + (i === idx ? ' on' : '') + '" data-i="' + i + '"><b>/' + c[0] + (c[1] ? ' <span style="font-weight:400">' + esc(c[1]) + '</span>' : '') + '</b><i>' + esc(c[2]) + '</i></div>').join('');
+      box.hidden = !items.length;
+      const on = box.querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+    };
+    input.addEventListener('input', () => {
+      const v = input.value, m = v.match(/^\/(\w*)(\s?)/);
+      if (!m) return close();
+      const q = m[1].toLowerCase();
+      // na de spatie: alleen de uitleg van dat ene commando laten zien (niet kiesbaar)
+      if (m[2]) { const c = COMMANDS.find((x) => x[0] === q); items = []; box.innerHTML = c ? '<div class="mdd-i" style="cursor:default"><b>/' + c[0] + ' <span style="font-weight:400">' + esc(c[1]) + '</span></b><i>' + esc(c[2]) + '</i></div>' : ''; box.hidden = !c; return; }
+      items = [...COMMANDS.filter((c) => c[0].startsWith(q)), ...COMMANDS.filter((c) => !c[0].startsWith(q) && c[0].includes(q))];
+      idx = 0; draw();
+    });
+    input.addEventListener('keydown', (e) => {
+      if (box.hidden) return;
+      if (!items.length) { if (e.key === 'Escape') { e.stopImmediatePropagation(); box.hidden = true; } return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopImmediatePropagation(); idx = (idx + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length; draw(); }
+      else if (e.key === 'Tab' || (e.key === 'Enter' && !COMMANDS.some((c) => '/' + c[0] === input.value.trim().toLowerCase()))) { e.preventDefault(); e.stopImmediatePropagation(); pick(items[idx]); }
+      else if (e.key === 'Escape') { e.stopImmediatePropagation(); close(); }
+    });
+    box.addEventListener('mousedown', (e) => { e.preventDefault(); const it = e.target.closest('.mdd-i[data-i]'); if (it) pick(items[+it.dataset.i]); });
+    input.addEventListener('blur', () => setTimeout(close, 150));
   }
 
   // @naam aanvullen: lijst met namen uit deze chat (nieuwste eerst) en de deelnemerslijst
