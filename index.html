@@ -619,7 +619,7 @@
       <ul>
         <li>Drie manieren: <b>in de browser</b> op r5mod.daver5.nl, als <b>web-app</b> of als <b>Windows-app</b>. Overal dezelfde functies.</li>
         <li><b>Web-app</b>: ⚙ → <b>Installeer Web-App</b>, of in Chrome/Edge het installeer-icoon in de adresbalk. Op iPhone/iPad: Safari → Delen → Zet op beginscherm. Je krijgt een eigen venster en snelkoppeling, zonder browserbalk.</li>
-        <li><b>Windows-app</b>: ⚙ → <b>Installeer App</b> downloadt de nieuwste versie (.exe). Alle versies staan op <a href="https://github.com/Dave-R5/modweergave/releases" target="_blank" rel="noopener">GitHub-releases</a>.</li>
+        <li><b>Windows-app</b>: ⚙ → <b>Installeer App</b> downloadt de nieuwste versie (.exe). Alle versies staan op <a href="https://github.com/Dave-R5/R5ModHub/releases" target="_blank" rel="noopener">GitHub-releases</a>.</li>
         <li><b>Inloggen in de Windows-app</b> gaat in een klein venster van de app zelf. De eerste keer log je ook bij twitch.tv in, zodat de speler je Turbo of abonnement herkent (geen reclame).</li>
         <li><b>Updates</b>: nieuwe functies van de site komen vanzelf mee (verversen of app herstarten). De Windows-app zoekt bij het starten en elke 4 uur naar een nieuwe versie, downloadt die op de achtergrond en vraagt dan om te herstarten. Kies je Later, dan wordt hij geïnstalleerd als je de app afsluit.</li>
         <li>Zelf zoeken: ⚙ → <b>Windows-app</b> → <b>Zoeken naar updates</b>.</li>
@@ -4045,9 +4045,9 @@
   }
   // direct de .exe van de nieuwste release downloaden; lukt dat niet, dan de releasepagina openen
   $('#desktopBtn').onclick = async () => {
-    const page = 'https://github.com/Dave-R5/modweergave/releases/latest';
+    const page = 'https://github.com/Dave-R5/R5ModHub/releases/latest';
     try {
-      const j = await (await fetch('https://api.github.com/repos/Dave-R5/modweergave/releases/latest')).json();
+      const j = await (await fetch('https://api.github.com/repos/Dave-R5/R5ModHub/releases/latest')).json();
       const exe = (j.assets || []).find((x) => /\.exe$/i.test(x.name));
       if (!exe) throw 0;
       location.href = exe.browser_download_url;
