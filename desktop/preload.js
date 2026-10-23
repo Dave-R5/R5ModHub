@@ -4,6 +4,9 @@ const { contextBridge, ipcRenderer, webFrame } = require('electron');
 contextBridge.exposeInMainWorld('r5app', {
   checkUpdate: () => ipcRenderer.invoke('r5:check-update'),
   openDownload: () => ipcRenderer.invoke('r5:open-download'),
+  // in-place updates: action = 'state' | 'check' | 'download' | 'install'; onUpdate(fn) krijgt elke wijziging
+  update: (action) => ipcRenderer.invoke('r5:update', String(action || 'state')),
+  onUpdate: (fn) => ipcRenderer.on('r5:update-state', (_e, u) => fn(u)),
   // beloningswachtrij van Twitch als losse weergave over een blok (zie main.js)
   rewardsShow: (ch, r) => ipcRenderer.send('r5:rq-show', String(ch), { x: +r.x || 0, y: +r.y || 0, w: +r.w || 0, h: +r.h || 0 }),
   rewardsClose: (ch) => ipcRenderer.send('r5:rq-close', String(ch)),
