@@ -75,6 +75,32 @@
   .zone.modlog .ml-list { flex: 1; max-height: none; padding: 0 8px; }
   .zone.modlog .ml-row .time { min-width: 38px; }
   .zone.graph { width: 640px; height: 230px; }
+  .zone.songs { width: 400px; height: 560px; }
+  .zone.songs .dot { display: none; }
+  .sg-now { margin: 8px 8px 6px; padding: 8px 10px; border-radius: 8px; background: linear-gradient(135deg, #123d24, var(--panel2)); border: 1px solid #1f5c36; }
+  .sg-now.idle { background: var(--panel2); border-color: var(--line); color: var(--muted); font-size: 13px; }
+  .sg-now .lbl { font-size: 11px; font-weight: 700; letter-spacing: .04em; color: #7fe0a4; }
+  .sg-now b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sg-now small { color: var(--muted); font-size: 12px; }
+  .sg-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0 8px 6px; }
+  .sg-acts button { min-height: 36px; touch-action: manipulation; }
+  .sg-acts .danger, .sg-row .danger { border-color: var(--danger); }
+  .sg-tabs { display: flex; gap: 4px; padding: 0 8px 6px; flex-wrap: wrap; }
+  .sg-tabs button { font-size: 12px; padding: 2px 9px; border-radius: 12px; color: var(--muted); }
+  .sg-tabs button.on { color: var(--text); border-color: var(--accent); }
+  .sg-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 5px; }
+  .sg-list .hint { color: var(--muted); font-size: 13px; }
+  .sg-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
+  .sg-row.done { opacity: .6; }
+  .sg-row .nr { font: 12px ui-monospace, Consolas, monospace; color: var(--muted); min-width: 30px; }
+  .sg-row .i { flex: 1; min-width: 0; }
+  .sg-row .i b { display: block; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sg-row .i small { color: var(--muted); font-size: 12px; }
+  .sg-row .danger { padding: 2px 8px; font-size: 12px; min-height: 30px; }
+  .sg-st { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 10px; white-space: nowrap; }
+  .sg-st.wachtrij { background: #2a2140; color: #c6a8ff; } .sg-st.speelt { background: #123d24; color: #7fe0a4; }
+  .sg-st.geweigerd { background: #3a1212; color: #ff7b7b; } .sg-st.gespeeld { background: var(--line); color: var(--muted); }
+  .sg-foot { padding: 6px 8px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11.5px; }
   .zone.graph .zone-head .gnow { font-size: 12px; color: var(--muted); font-weight: 400; white-space: nowrap; }
   .gbox { flex: 1; min-height: 0; position: relative; }
   .gbox svg { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -415,6 +441,7 @@
       <option value="modlog">Modlog van dit kanaal</option>
       <option value="graph">Kijkersgrafiek</option>
       <option value="rewards">Beloningsverzoeken (wachtrij)</option>
+      <option value="songs">Verzoekjes (nummers, afwijzen en volgende)</option>
       <option value="twchat">Twitch-chat (origineel, ingebouwd)</option>
     </select>
     <div id="zoneNameWrap">
@@ -660,6 +687,7 @@
         <li><b>Eigen ⇄ Twitch</b> in de kop van een chatblok: wissel tussen de chat van R5 ModHub (met sneltoetsen, selectie en kleuren) en de echte chat van Twitch (polls, voorspellingen, kanaalpunten).</li>
         <li><b>Twitch-chat (origineel)</b>: de echte chat van Twitch als blok, met polls, voorspellingen en kanaalpunten zoals op Twitch zelf.</li>
         <li><b>Beloningsverzoeken</b>: blok per kanaal met de wachtrij van Twitch (goedkeuren of weigeren als mod). In de Windows-app staat hij in het blok, in de browser opent hij in een eigen venster.</li>
+        <li><b>🎵 Verzoekjes</b>: blok met de nummerverzoeken van een kanaal: wat er nu speelt, de wachtrij, en wat gespeeld of geweigerd is (met reden en door wie). Als mod wijs je een nummer af of ga je naar het volgende; het blok zet dan <code>!weiger &lt;nr&gt;</code> of <code>!volgende</code> in de chat. Werkt met een verzoekjes-app die de verzoeken met nummer in de chat zet (🎵 #12 …).</li>
         <li><b>Kijkersgrafiek</b> met export naar Excel (CSV). De streamkop toont live-tijd en kijkers.</li>
       </ul>
     </details>
@@ -682,6 +710,12 @@
       <summary><span class="hi">📜</span>Changelog<small>wat is er veranderd</small></summary>
       <div class="cl">
         <details class="cl-ver" open>
+          <summary>Site-update <small>23 okt 2026</small></summary>
+          <ul>
+            <li><b>🎵 Verzoekjes</b>: nieuw blok (via + Zone of ✎ op een tabblad) met de nummerverzoeken van het kanaal. Je ziet wat er speelt, de wachtrij en wat gespeeld of geweigerd is. Mods kunnen een nummer afwijzen (met reden) of naar het volgende gaan.</li>
+          </ul>
+        </details>
+        <details class="cl-ver">
           <summary>Versie 1.7.5 <small>23 okt 2026</small></summary>
           <ul>
             <li><b>Windows-app</b>: nieuwe manier van bijwerken. In ⚙ Instellingen zoek je naar updates, download je hem met een voortgangsbalk en klik je op <b>Installeren en herstarten</b>. De update wordt dan stil op dezelfde plek geïnstalleerd en de app start vanzelf opnieuw, zonder installatiewizard.</li>
@@ -858,6 +892,9 @@
   let words = store.get('words', []);      // woordfilter, kleine letters
   let notes = store.get('notes', {});      // login -> notitie
   let modlog = store.get('modlog', []);    // [{t, ch, user, what}]
+  // verzoekjes per kanaal (zie buildSongsZone); ouder dan 12 uur valt weg
+  const songs = store.get('songs', {});    // kanaal -> { nr: {nr, title, artists, user, status, reason, t} }
+  Object.keys(songs).forEach((ch) => Object.values(songs[ch]).forEach((x) => { if (Date.now() - x.t > 12 * 3600e3) delete songs[ch][x.nr]; }));
   const saveOpts = () => { store.set('opts', opts); applyOpts(); };
   function applyOpts() {
     document.body.classList.toggle('hl-words', opts.hlWords);
@@ -1054,6 +1091,7 @@
         let text = m.params[1] || '';
         const action = text.startsWith('\u0001ACTION ');
         if (action) text = text.slice(8, -1);
+        if (/broadcaster/.test(m.tags.badges || '')) songMsg(ch, text, +m.tags['tmi-sent-ts'] || Date.now());
         addMsg(ch, {
           id: m.tags.id, userId: m.tags['user-id'], user: m.prefix.split('!')[0],
           name: m.tags['display-name'] || m.prefix.split('!')[0], color: m.tags.color,
@@ -1162,7 +1200,7 @@
   }
 
   // ✎ op een tabblad: naam en per blok een schakelaar
-  const TE_KINDS = [['stream', '📺 Stream'], ['chat', '💬 Chat'], ['users', '👥 Kijkers'], ['graph', '📈 Kijkersgrafiek'], ['modlog', '📋 Modlog'], ['rewards', '🎁 Beloningsverzoeken'], ['twchat', '🟣 Twitch-chat (origineel)']];
+  const TE_KINDS = [['stream', '📺 Stream'], ['chat', '💬 Chat'], ['users', '👥 Kijkers'], ['graph', '📈 Kijkersgrafiek'], ['modlog', '📋 Modlog'], ['rewards', '🎁 Beloningsverzoeken'], ['songs', '🎵 Verzoekjes'], ['twchat', '🟣 Twitch-chat (origineel)']];
   function openTabEdit(id) {
     if (state.tab !== id) switchTab(id);
     const t = curTab();
@@ -1247,9 +1285,9 @@
   // Een chatzone per kanaal; staat hetzelfde kanaal in meerdere tabbladen,
   // dan verhuist dezelfde zone mee naar het tabblad dat open is.
   const zoneEls = {};
-  const keyOf = (z) => z.kind === 'buttons' ? 'buttons' : (['stream', 'users', 'modlog', 'graph', 'rewards', 'twchat'].includes(z.kind) ? z.kind + ':' : '') + z.channel;
+  const keyOf = (z) => z.kind === 'buttons' ? 'buttons' : (['stream', 'users', 'modlog', 'graph', 'rewards', 'songs', 'twchat'].includes(z.kind) ? z.kind + ':' : '') + z.channel;
   const buildAny = (z) => z.kind === 'stream' ? buildStream(z) : z.kind === 'buttons' ? buildPad(z) : z.kind === 'users' ? buildUsers(z)
-    : z.kind === 'modlog' ? buildModlogZone(z) : z.kind === 'graph' ? buildGraphZone(z) : z.kind === 'rewards' ? buildRewardsZone(z) : z.kind === 'twchat' ? buildTwChatZone(z) : buildZone(z);
+    : z.kind === 'modlog' ? buildModlogZone(z) : z.kind === 'graph' ? buildGraphZone(z) : z.kind === 'rewards' ? buildRewardsZone(z) : z.kind === 'songs' ? buildSongsZone(z) : z.kind === 'twchat' ? buildTwChatZone(z) : buildZone(z);
 
   function renderZones() {
     const wrap = $('#zones');
@@ -2246,6 +2284,91 @@
     zone.root.querySelector('.player-off button').onclick = () => window.open(url, 'rq-' + z.channel, 'width=460,height=760');
     return zone;
   }
+  // ---------- verzoekjes ----------
+  // Nummerverzoeken via kanaalpunten. De verzoekjes-app van de streamer zet elk verzoek met een
+  // nummer in de chat ("🎵 #12 ..."); dit blok maakt daar een lijst van. Afwijzen en Volgende sturen
+  // !weiger <nr> en !volgende in de chat; de app voert die alleen uit voor mods en de streamer.
+  // Alleen berichten van de streamer zelf tellen, zodat kijkers niets kunnen namaken.
+  const saveSongs = () => store.set('songs', songs);
+  function songMsg(ch, text, t) {
+    const list = songs[ch] || (songs[ch] = {});
+    const put = (nr, patch) => {
+      const old = list[nr];
+      if (old && old.t > t) return;   // oudere berichten (chatgeschiedenis) overschrijven niets
+      list[nr] = Object.assign({ nr: +nr, title: '', artists: '', user: '' }, old, patch, { t });
+    };
+    const user = (text.match(/^@(\S+)/) || [])[1] || '';
+    let m;
+    if ((m = text.match(/🎵 #(\d+) "(.*)" van (.*) staat in de wachtrij/))) put(m[1], { title: m[2], artists: m[3], user, status: 'wachtrij', reason: '' });
+    else if ((m = text.match(/🎵 #(\d+) Je verzoek "(.*)" is geweigerd: (.*?)\. Je punten/))) put(m[1], { title: m[2], user, status: 'geweigerd', reason: m[3] });
+    else if ((m = text.match(/🎵 #(\d+) "(.*)" is afgewezen door (.*?)\. (Je punten|Het nummer)/))) put(m[1], { title: m[2], user, status: 'geweigerd', reason: 'afgewezen door ' + m[3] });
+    else if ((m = text.match(/Nu: 🎵 #(\d+) "(.*)" van (.*) \(aangevraagd door (\S+)\)/))) {
+      Object.values(list).forEach((x) => { if (x.status === 'speelt' && x.t <= t) x.status = 'gespeeld'; });
+      put(m[1], { title: m[2], artists: m[3], user: m[4], status: 'speelt' });
+    } else if (/^⏭ \S+ slaat het nummer over/.test(text)) {
+      Object.values(list).forEach((x) => { if (x.status === 'speelt' && x.t <= t) { x.status = 'gespeeld'; x.t = t; } });
+    } else return;
+    saveSongs();
+    const z = zoneEls['songs:' + ch];
+    if (z) z.redraw();
+  }
+  // bij openen: de lijst aanvullen uit de chatgeschiedenis (zelfde dienst als het chatblok)
+  async function songsHistory(ch) {
+    try {
+      const j = await (await fetch('https://recent-messages.robotty.de/api/v2/recent-messages/' + encodeURIComponent(ch) + '?limit=800')).json();
+      (j.messages || []).forEach((l) => {
+        if (!/ PRIVMSG #/.test(l)) return;
+        const m = parseLine(l);
+        if (/broadcaster/.test(m.tags.badges || '')) songMsg(ch, m.params[1] || '', +m.tags['tmi-sent-ts'] || 0);
+      });
+    } catch {}
+  }
+  function buildSongsZone(z) {
+    const zone = makeShell(z, '🎵 Verzoekjes ' + z.channel, '');
+    zone.root.insertAdjacentHTML('beforeend', '<div class="sg-now"></div>' +
+      '<div class="sg-acts"><button class="primary" data-sg="next">⏭ Volgende</button><button class="danger" data-sg="cur">✕ Huidige afwijzen</button></div>' +
+      '<div class="sg-tabs"></div><div class="sg-list"></div>' +
+      '<div class="sg-foot">De knoppen zetten <code>!volgende</code> of <code>!weiger &lt;nr&gt;</code> namens jou in de chat. Werkt alleen als mod of streamer.</div>');
+    const ch = z.channel, now = zone.root.querySelector('.sg-now'), tabs = zone.root.querySelector('.sg-tabs'), list = zone.root.querySelector('.sg-list');
+    let filter = 'alles';
+    const playing = () => Object.values(songs[ch] || {}).find((x) => x.status === 'speelt');
+    const reject = (x) => {
+      const why = prompt('#' + x.nr + ' "' + x.title + '" van ' + x.user + ' afwijzen?\nReden (mag leeg blijven):', '');
+      if (why === null) return;
+      sendChat(ch, ('!weiger ' + x.nr + ' ' + why.trim()).trim());
+    };
+    zone.root.querySelector('[data-sg=next]').onclick = () => sendChat(ch, '!volgende');
+    zone.root.querySelector('[data-sg=cur]').onclick = () => { const x = playing(); if (x) reject(x); else toast('Er speelt nu geen verzoekje.', 'err'); };
+    tabs.onclick = (e) => { const b = e.target.closest('[data-f]'); if (b) { filter = b.dataset.f; zone.redraw(); } };
+    list.onclick = (e) => { const b = e.target.closest('[data-nr]'); if (b) reject((songs[ch] || {})[b.dataset.nr]); };
+    zone.redraw = () => {
+      const all = Object.values(songs[ch] || {});
+      const cur = playing();
+      now.className = 'sg-now' + (cur ? '' : ' idle');
+      now.innerHTML = cur ? '<div class="lbl">NU SPEELT</div><b>#' + cur.nr + ' ' + esc(cur.title) + '</b><small>' + esc(cur.artists) + ' · door ' + esc(cur.user) + '</small>'
+        : 'Er speelt nu geen verzoekje.';
+      const count = (st) => all.filter((x) => x.status === st).length;
+      tabs.innerHTML = [['alles', 'Alles'], ['wachtrij', 'Wachtrij'], ['geweigerd', 'Geweigerd'], ['gespeeld', 'Gespeeld']]
+        .map(([f, l]) => '<button data-f="' + f + '" class="' + (f === filter ? 'on' : '') + '">' + l + (f === 'alles' ? '' : ' ' + count(f)) + '</button>').join('');
+      // wachtrij bovenaan op volgorde, daarna de rest (nieuwste eerst)
+      const rank = { speelt: 0, wachtrij: 1 };
+      const rows = all.filter((x) => filter === 'alles' || x.status === filter)
+        .sort((a, b) => (rank[a.status] ?? 2) - (rank[b.status] ?? 2) || (a.status === 'wachtrij' ? a.nr - b.nr : b.t - a.t));
+      let pos = 0;
+      list.innerHTML = rows.length ? rows.map((x) => {
+        const label = x.status === 'wachtrij' ? 'wachtrij ' + (++pos) : x.status;
+        const sub = [x.artists, x.user && 'door ' + x.user, x.reason].filter(Boolean).join(' · ');
+        return '<div class="sg-row' + (x.status === 'gespeeld' || x.status === 'geweigerd' ? ' done' : '') + '"><span class="nr">#' + x.nr + '</span>' +
+          '<div class="i"><b>' + esc(x.title || '?') + '</b><small>' + esc(sub) + '</small></div><span class="sg-st ' + x.status + '">' + esc(label) + '</span>' +
+          (x.status === 'wachtrij' || x.status === 'speelt' ? '<button class="danger" data-nr="' + x.nr + '">✕ Afwijzen</button>' : '') + '</div>';
+      }).join('') : '<p class="hint">' + (all.length ? 'Niets in deze lijst.' : 'Nog geen verzoekjes gezien in ' + esc(ch) +
+        '. Ze verschijnen zodra de verzoekjes-app van de streamer ze in de chat zet ("🎵 #12 ...").') + '</p>';
+    };
+    zone.redraw();
+    if (ch !== 'demo') songsHistory(ch);
+    return zone;
+  }
+
   function buildModlogZone(z) {
     const zone = makeShell(z, '📋 Modlog ' + z.channel, '');
     zone.root.insertAdjacentHTML('beforeend', '<div class="ml-list"></div>');
@@ -2521,7 +2644,8 @@
 
   function chatChannels() {
     const s = new Set();
-    state.tabs.forEach((t) => t.zones.forEach((z) => { if (!z.kind || z.kind === 'chat') s.add(z.channel); }));
+    // het verzoekjesblok leest ook de chat, dus ook dan het kanaal volgen
+    state.tabs.forEach((t) => t.zones.forEach((z) => { if (!z.kind || z.kind === 'chat' || z.kind === 'songs') s.add(z.channel); }));
     return s;
   }
   function syncChannels() {
