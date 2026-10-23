@@ -273,6 +273,8 @@
   .modal label { display: block; margin: 10px 0 4px; font-size: 12px; color: var(--muted); }
   .modal .row { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; flex-wrap: wrap; }
   .modal .hint { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+  .exe-bar { height: 6px; background: var(--border, #333); border-radius: 3px; margin: 6px 0 2px; overflow: hidden; }
+  .exe-bar div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
   .modal hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
   .keycap { text-align: center; cursor: pointer; }
   .keycap.listening { border-color: var(--accent); color: var(--accent); }
@@ -537,6 +539,7 @@
       <hr>
       <label>Windows-app</label>
       <div class="hint" id="exeState"></div>
+      <div class="exe-bar" id="exeBar" hidden><div></div></div>
       <div class="row" style="justify-content:flex-start">
         <button id="exeCheck">Zoeken naar updates</button>
         <button class="primary" id="exeDownload" hidden>Downloaden</button>
@@ -679,6 +682,12 @@
       <summary><span class="hi">📜</span>Changelog<small>wat is er veranderd</small></summary>
       <div class="cl">
         <details class="cl-ver" open>
+          <summary>Versie 1.7.5 <small>23 okt 2026</small></summary>
+          <ul>
+            <li><b>Windows-app</b>: nieuwe manier van bijwerken, net als PointPlay. In ⚙ Instellingen zoek je naar updates, download je hem met een voortgangsbalk en klik je op <b>Installeren en herstarten</b>. De update wordt dan stil op dezelfde plek geïnstalleerd en de app start vanzelf opnieuw, zonder installatiewizard.</li>
+          </ul>
+        </details>
+        <details class="cl-ver">
           <summary>Versie 1.7.0 <small>23 okt 2026</small></summary>
           <ul>
             <li><b>Stream</b>: stopt niet meer als je Instellingen opent of naar een andere app gaat. Pauzeert Twitch hem toch even, dan speelt hij daarna vanzelf verder.</li>
@@ -3925,18 +3934,53 @@
   // Windows-app (.exe): zoeken naar updates. Alleen de .exe heeft window.r5app.
   if (window.r5app) {
     $('#exeBox').hidden = false;
-    const exeCheck = async (quiet) => {
-      $('#exeState').textContent = 'Bezig met zoeken naar updates…';
-      const r = await window.r5app.checkUpdate();
-      if (!r) return;
-      $('#exeDownload').hidden = !r.update;
-      $('#exeState').textContent = 'Versie ' + r.current + '. ' + (r.error ? r.error
-        : r.update ? 'Nieuwe versie ' + r.latest + ' is beschikbaar.' : 'Je hebt de nieuwste versie.');
-      if (r.update && quiet) toast('Nieuwe versie ' + r.latest + ' van de Windows-app beschikbaar, zie ⚙ Instellingen.', 'ok');
-    };
-    $('#exeCheck').onclick = () => exeCheck(false);
-    $('#exeDownload').onclick = () => window.r5app.openDownload();
-    exeCheck(true);
+    if (window.r5app.update) {
+      // 1.7.5+: in-place update (zoeken, downloaden met voortgang, installeren en herstarten)
+      let told = '';
+      const renderExe = (u) => {
+        if (!u) return;
+        const text = {
+          disabled: u.message,
+          idle: 'Versie ' + u.currentVersion + '. Nog niet gecontroleerd.',
+          checking: 'Bezig met zoeken naar updates…',
+          latest: 'Versie ' + u.currentVersion + '. Je hebt de nieuwste versie.',
+          available: 'Versie ' + u.currentVersion + '. Nieuwe versie ' + u.version + ' is beschikbaar.',
+          downloading: 'Downloaden… ' + (u.percent || 0) + '%',
+          ready: 'Versie ' + u.version + ' is klaar. De app installeert hem op dezelfde plek en start daarna opnieuw.',
+          error: u.message,
+        }[u.status];
+        $('#exeState').textContent = text || '';
+        $('#exeBar').hidden = u.status !== 'downloading';
+        $('#exeBar div').style.width = (u.percent || 0) + '%';
+        const act = { available: ['download', 'Downloaden'], ready: ['install', 'Installeren en herstarten'] }[u.status];
+        $('#exeDownload').hidden = !act;
+        if (act) { $('#exeDownload').dataset.action = act[0]; $('#exeDownload').textContent = act[1]; }
+        $('#exeCheck').disabled = ['disabled', 'checking', 'downloading'].includes(u.status);
+        const key = u.status + u.version;
+        if ((u.status === 'available' || u.status === 'ready') && told !== key) {
+          told = key;
+          toast(u.status === 'ready' ? 'Versie ' + u.version + ' van de Windows-app is gedownload, zie ⚙ Instellingen.'
+            : 'Nieuwe versie ' + u.version + ' van de Windows-app beschikbaar, zie ⚙ Instellingen.', 'ok');
+        }
+      };
+      window.r5app.onUpdate(renderExe);
+      $('#exeCheck').onclick = async () => renderExe(await window.r5app.update('check'));
+      $('#exeDownload').onclick = async (e) => renderExe(await window.r5app.update(e.currentTarget.dataset.action));
+      window.r5app.update('state').then(renderExe);
+    } else {
+      const exeCheck = async (quiet) => {
+        $('#exeState').textContent = 'Bezig met zoeken naar updates…';
+        const r = await window.r5app.checkUpdate();
+        if (!r) return;
+        $('#exeDownload').hidden = !r.update;
+        $('#exeState').textContent = 'Versie ' + r.current + '. ' + (r.error ? r.error
+          : r.update ? 'Nieuwe versie ' + r.latest + ' is beschikbaar.' : 'Je hebt de nieuwste versie.');
+        if (r.update && quiet) toast('Nieuwe versie ' + r.latest + ' van de Windows-app beschikbaar, zie ⚙ Instellingen.', 'ok');
+      };
+      $('#exeCheck').onclick = () => exeCheck(false);
+      $('#exeDownload').onclick = () => window.r5app.openDownload();
+      exeCheck(true);
+    }
   }
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('/sw.js').catch(() => {});
 })();

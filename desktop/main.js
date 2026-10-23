@@ -9,10 +9,13 @@ const crypto = require('crypto');
 const START_URL = 'https://r5mod.daver5.nl/';
 const inApp = (url) => url.startsWith(START_URL);
 
-// Updates: de app werkt zichzelf bij vanaf de openbare GitHub-releases (electron-updater).
-// Bij het starten (en elke 4 uur) wordt gezocht; een nieuwe versie wordt op de achtergrond
-// gedownload en daarna gevraagd om te herstarten. Anders installeert hij bij afsluiten.
-// De site toont dit in Instellingen > Windows-app (checkUpdate / openDownload).
+// Updates: de app werkt zichzelf bij vanaf de openbare GitHub-releases (electron-updater),
+// op dezelfde manier als PointPlay: zoeken, downloaden met voortgang en daarna in-place
+// installeren. De installer draait dan stil op de plek waar de app al staat en start
+// R5 ModHub daarna vanzelf opnieuw (geen installatiewizard).
+// Bij het starten (en elke 4 uur) wordt stilletjes gezocht; downloaden doe je in
+// Instellingen > Windows-app. Is een update gedownload maar niet geïnstalleerd, dan gebeurt
+// dat bij het afsluiten.
 const RELEASES_URL = 'https://github.com/Dave-R5/modweergave/releases';
 const newer = (a, b) => {
   const x = a.split('.').map(Number), y = b.split('.').map(Number);
@@ -21,49 +24,70 @@ const newer = (a, b) => {
 };
 const fromSite = (e) => inApp(e.senderFrame?.url || '');
 
-const upd = { latest: null, ready: false, asked: false };
-autoUpdater.autoDownload = true;
+let upd = app.isPackaged
+  ? { status: 'idle', currentVersion: app.getVersion() }
+  : { status: 'disabled', currentVersion: app.getVersion(), message: 'Updates werken alleen in de geïnstalleerde versie.' };
+const setUpd = (patch) => {
+  upd = { ...upd, ...patch };
+  if (win && !win.isDestroyed()) win.webContents.send('r5:update-state', upd);
+};
+const friendly = (err) => {
+  const msg = String(err?.message || err);
+  if (/ENOTFOUND|ETIMEDOUT|ECONNRE|net::/i.test(msg)) return 'Geen verbinding met de updateserver. Controleer je internet.';
+  if (/404|Unable to find latest version|No published versions/i.test(msg)) return 'Er zijn nog geen updates gepubliceerd.';
+  return 'Update mislukt: ' + msg.split('\n')[0];
+};
+autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = true;
-autoUpdater.on('update-available', (i) => { upd.latest = i.version; });
-autoUpdater.on('update-not-available', (i) => { upd.latest = i.version; });
-autoUpdater.on('update-downloaded', (i) => {
-  upd.latest = i.version; upd.ready = true;
-  if (!upd.asked) { upd.asked = true; askRestart(); }
+autoUpdater.on('checking-for-update', () => { if (upd.status !== 'downloading' && upd.status !== 'ready') setUpd({ status: 'checking', message: null }); });
+autoUpdater.on('update-available', (i) => {
+  if (upd.status === 'downloading' || upd.status === 'ready') return;
+  setUpd({ status: 'available', version: i.version });
 });
-autoUpdater.on('error', () => {});
+autoUpdater.on('update-not-available', () => setUpd({ status: 'latest', checkedAt: Date.now() }));
+autoUpdater.on('download-progress', (p) => setUpd({ status: 'downloading', percent: Math.round(p.percent) }));
+autoUpdater.on('update-downloaded', (i) => setUpd({ status: 'ready', version: i.version }));
+autoUpdater.on('error', (err) => setUpd({ status: 'error', message: friendly(err) }));
 
-async function askRestart() {
-  if (!win) return;
-  const { response } = await dialog.showMessageBox(win, {
-    type: 'info', buttons: ['Nu herstarten', 'Later'], defaultId: 0, cancelId: 1, title: 'R5 ModHub',
-    message: `Versie ${upd.latest} van R5 ModHub is klaar.`,
-    detail: 'Herstart nu om bij te werken. Kies je Later, dan wordt de update geïnstalleerd als je de app afsluit.',
-  });
-  if (response === 0) autoUpdater.quitAndInstall();
+async function checkForUpdates() {
+  if (upd.status === 'disabled' || upd.status === 'downloading' || upd.status === 'ready') return upd;
+  try { await autoUpdater.checkForUpdates(); } catch (err) { setUpd({ status: 'error', message: friendly(err) }); }
+  return upd;
+}
+function downloadUpdate() {
+  if (upd.status !== 'available') return upd;
+  setUpd({ status: 'downloading', percent: 0 });
+  autoUpdater.downloadUpdate().catch((err) => setUpd({ status: 'error', message: friendly(err) }));
+  return upd;
+}
+function installUpdate() {
+  if (upd.status !== 'ready') return upd;
+  // Sluit de app, installeert de update stil op dezelfde plek en start R5 ModHub opnieuw.
+  setImmediate(() => autoUpdater.quitAndInstall(true, true));
+  return upd;
 }
 
-const checkForUpdates = () => (app.isPackaged ? autoUpdater.checkForUpdates() : Promise.resolve(null));
+ipcMain.handle('r5:update', async (e, action) => {
+  if (!fromSite(e)) return null;
+  if (action === 'check') return checkForUpdates();
+  if (action === 'download') return downloadUpdate();
+  if (action === 'install') return installUpdate();
+  return upd;
+});
 
+// Oude aanroepen (site van vóór 1.7.5): blijven werken met dezelfde in-place update.
 ipcMain.handle('r5:check-update', async (e) => {
   if (!fromSite(e)) return null;
-  const current = app.getVersion();
-  try {
-    const r = await checkForUpdates();
-    const latest = r?.updateInfo?.version || upd.latest || current;
-    return { current, latest, update: newer(latest, current) };
-  } catch (err) {
-    return { current, error: 'Kon niet zoeken naar updates (' + err.message + ').' };
-  }
+  const u = await checkForUpdates();
+  if (u.status === 'error' || u.status === 'disabled') return { current: u.currentVersion, error: u.message };
+  const latest = u.version || u.currentVersion;
+  return { current: u.currentVersion, latest, update: newer(latest, u.currentVersion) };
 });
-// "Downloaden" in Instellingen: is de update al binnen, dan meteen herstarten.
 ipcMain.handle('r5:open-download', async (e) => {
   if (!fromSite(e)) return;
-  if (upd.ready) return askRestart();
   if (!app.isPackaged) return shell.openExternal(RELEASES_URL);
-  await dialog.showMessageBox(win, {
-    type: 'info', buttons: ['OK'], title: 'R5 ModHub',
-    message: 'De update wordt gedownload.', detail: 'Zodra hij klaar is, vraagt de app of je wilt herstarten.',
-  });
+  if (upd.status === 'ready') return installUpdate();
+  downloadUpdate();
 });
 
 // Vervanging voor window.prompt(): een klein invoervenster bovenop de app.
@@ -368,7 +392,7 @@ const closeAllRq = () => { rq.forEach((v) => { try { win.contentView.removeChild
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
 app.whenReady().then(() => {
   createWindow();
-  checkForUpdates().catch(() => {});
-  setInterval(() => checkForUpdates().catch(() => {}), 4 * 60 * 60 * 1000);
+  setTimeout(checkForUpdates, 10_000);
+  setInterval(checkForUpdates, 4 * 60 * 60 * 1000);
 });
 app.on('window-all-closed', () => app.quit());
