@@ -710,6 +710,12 @@
       <summary><span class="hi">📜</span>Changelog<small>wat is er veranderd</small></summary>
       <div class="cl">
         <details class="cl-ver" open>
+          <summary>Nieuw sinds 1.8.0 <small>23 okt 2026</small></summary>
+          <ul>
+            <li><b>Beloningsverzoeken</b> (app): de wachtrij verdwijnt als je een stream op volledig scherm zet en komt terug als je dat weer uitzet.</li>
+          </ul>
+        </details>
+        <details class="cl-ver">
           <summary>Versie 1.8.0 <small>23 okt 2026</small></summary>
           <ul>
             <li><b>Windows-app</b>: zoekt updates en downloads nu op het nieuwe adres van R5 ModHub op GitHub.</li>
@@ -2158,7 +2164,8 @@
   document.addEventListener('pointerup', rqDrop, true);
   window.addEventListener('blur', rqDrop);
   function syncRewards() {
-    const modal = rqDrag || !!document.querySelector('.modal-bg.open, #picker:not([hidden])');
+    // verbergen tijdens slepen, een venster in de site of een stream op volledig scherm
+    const modal = rqDrag || !!document.fullscreenElement || !!document.querySelector('.modal-bg.open, #picker:not([hidden])');
     Object.values(zoneEls).forEach((z) => {
       if (!z.rqSlot) return;
       const s = z.rqSlot;
