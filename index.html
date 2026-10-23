@@ -679,8 +679,9 @@
       <summary><span class="hi">📜</span>Changelog<small>wat is er veranderd</small></summary>
       <div class="cl">
         <details class="cl-ver" open>
-          <summary>Nieuw sinds 1.6.5 <small>23 okt 2026</small></summary>
+          <summary>Versie 1.7.0 <small>23 okt 2026</small></summary>
           <ul>
+            <li><b>Stream</b>: stopt niet meer als je Instellingen opent of naar een andere app gaat. Pauzeert Twitch hem toch even, dan speelt hij daarna vanzelf verder.</li>
             <li><b>Chatblok</b>: schakelaar <b>💬 Eigen ⇄ 🟣 Twitch</b> in de kop. Op Twitch zie je in hetzelfde blok de echte chat van Twitch; R5 ModHub onthoudt je keuze per kanaal.</li>
             <li><b>Twitch-chat (origineel)</b>: nieuw blok (via + Zone of ✎ op een tabblad) met de echte chat van Twitch ingebouwd, inclusief polls, voorspellingen en kanaalpunten.</li>
           </ul>
@@ -2044,6 +2045,10 @@
       loadTwitchEmbed().then(() => {
         const p = new Twitch.Player(zone.player, { channel: z.channel, parent: [host], width: '100%', height: '100%', muted: false, autoplay: true });
         p.addEventListener(Twitch.Player.READY, () => { try { p.setVolume(0.4); p.setMuted(false); } catch {} });
+        // Twitch pauzeert de speler zelf als er iets overheen ligt (Instellingen, kaartje) of als het venster
+        // verborgen is. Dat onthouden we, en daarna speelt hij vanzelf verder (zie resumePlayers).
+        p.addEventListener(Twitch.Player.PAUSE, () => { if (overlayOpen() || document.hidden) zone.autoPaused = true; });
+        p.addEventListener(Twitch.Player.PLAYING, () => { zone.autoPaused = false; });
         zone.tw = p;
       }).catch(() => {
         const f = document.createElement('iframe');
@@ -2061,6 +2066,14 @@
     }
     return zone;
   }
+
+  const overlayOpen = () => !!document.querySelector('.modal-bg.open, #picker:not([hidden]), #card:not([hidden])');
+  function resumePlayers() {
+    if (document.hidden || overlayOpen()) return;
+    Object.values(zoneEls).forEach((z) => { if (z.autoPaused && z.tw) { z.autoPaused = false; try { z.tw.play(); } catch {} } });
+  }
+  setInterval(resumePlayers, 1000);
+  document.addEventListener('visibilitychange', resumePlayers);
 
   // spelers elke frame op de plek van hun blok zetten; niet zichtbaar = buiten beeld, maar blijft spelen
   function syncPlayers() {

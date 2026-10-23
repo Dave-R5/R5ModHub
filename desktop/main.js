@@ -256,7 +256,9 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1400, height: 900, minWidth: 360, minHeight: 400,
     title: 'R5 ModHub', backgroundColor: '#0e0e10', autoHideMenuBar: true,
-    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, preload: path.join(__dirname, 'preload.js') },
+    // backgroundThrottling uit: de app telt als zichtbaar als hij achter een ander venster staat of
+    // geminimaliseerd is, zodat Twitch de stream niet pauzeert en chat/timers gewoon doorlopen
+    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false, preload: path.join(__dirname, 'preload.js') },
   });
   win.webContents.setUserAgent(chromeUA(win) + ' ModweergaveApp');
 
