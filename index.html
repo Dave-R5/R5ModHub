@@ -430,6 +430,13 @@
 </div>
 
 <!-- Kanaal toevoegen -->
+<div class="modal-bg" id="askModal">
+  <div class="modal" style="max-width:420px">
+    <label for="askInput" id="askMsg" style="white-space:pre-line"></label>
+    <input id="askInput" autocomplete="off">
+    <div class="row"><button id="askNo">Annuleren</button><button class="primary" id="askOk">OK</button></div>
+  </div>
+</div>
 <div class="modal-bg" id="zoneModal">
   <div class="modal">
     <h2>Zone toevoegen</h2>
@@ -715,6 +722,7 @@
           <summary>Nieuw sinds 1.8.0 <small>23 okt 2026</small></summary>
           <ul>
             <li><b>Stream</b>: in de kop van het streamblok staat nu de huidige game naast de kanaalnaam.</li>
+            <li><b>+ Tabblad</b> en tabblad hernoemen: het invulvenster zit nu in R5 ModHub zelf. In de app liep het venster soms vast, vooral met een stream of de beloningswachtrij open.</li>
             <li><b>Modlog</b>: met 🗑 in de kop van het modlogblok maak je het log van dat kanaal leeg.</li>
             <li><b>Beloningsverzoeken</b> (app): de wachtrij gaat niet meer over de gebruikerskaart, het chatmenu of de meldingen heen.</li>
             <li><b>Kijkersgrafiek</b>: een gamewissel komt nu binnen een minuut in de grafiek (Twitch gaf de nieuwe game soms pas veel later door).</li>
@@ -1198,8 +1206,8 @@
         state.tabs.splice(state.tabs.indexOf(to) + (after ? 1 : 0), 0, t);
         saveTabs(); renderTabs(); renderZones();
       });
-      b.ondblclick = () => {
-        const n = prompt('Naam van het tabblad', t.name);
+      b.ondblclick = async () => {
+        const n = await askText('Naam van het tabblad', t.name);
         if (n && n.trim()) { t.name = n.trim().slice(0, 30); saveTabs(); renderTabs(); }
       };
       const x = b.querySelector('.tclose');
@@ -1273,9 +1281,9 @@
     }).catch(() => {});
   }
 
-  function addTab() {
+  async function addTab() {
     // één keer het kanaal invullen: tabblad krijgt die naam en meteen stream, chat en kijkers
-    const n = prompt('Welk Twitch-kanaal? (naam of link)\nLeeg laten voor een leeg tabblad.', '');
+    const n = await askText('Welk Twitch-kanaal? (naam of link)\nLeeg laten voor een leeg tabblad.', '');
     if (n === null) return;
     const ch = n.trim().toLowerCase().replace(/^.*twitch\.tv\//, '').replace(/[^a-z0-9_]/g, '');
     if (ch) return openChannelTab(ch);
@@ -2362,8 +2370,8 @@
     const ch = z.channel, now = zone.root.querySelector('.sg-now'), tabs = zone.root.querySelector('.sg-tabs'), list = zone.root.querySelector('.sg-list');
     let filter = 'alles';
     const playing = () => Object.values(songs[ch] || {}).find((x) => x.status === 'speelt');
-    const reject = (x) => {
-      const why = prompt('#' + x.nr + ' "' + x.title + '" van ' + x.user + ' afwijzen?\nReden (mag leeg blijven):', '');
+    const reject = async (x) => {
+      const why = await askText('#' + x.nr + ' "' + x.title + '" van ' + x.user + ' afwijzen?\nReden (mag leeg blijven):', '');
       if (why === null) return;
       sendChat(ch, ('!weiger ' + x.nr + ' ' + why.trim()).trim());
     };
@@ -2516,8 +2524,8 @@
   // extra kanalen in Hoofd waar je geen mod bent (alleen login-namen)
   let extraChans = store.get('extraChans', []);
   const cleanCh = (n) => n.trim().toLowerCase().replace(/^.*twitch\.tv\//, '').replace(/[^a-z0-9_]/g, '');
-  function addExtraChan() {
-    const n = prompt('Welke streamer wil je in Hoofd zetten? (naam of link)', '');
+  async function addExtraChan() {
+    const n = await askText('Welke streamer wil je in Hoofd zetten? (naam of link)', '');
     if (n === null) return;
     const ch = cleanCh(n);
     if (!ch) return toast('Ongeldige kanaalnaam.', 'err');
@@ -3842,6 +3850,24 @@
   function nameColor(n) { let h = 0; for (const c of n) h = (h * 31 + c.charCodeAt(0)) % 360; return 'hsl(' + h + ',70%,65%)'; }
   function openModal(id) { document.getElementById(id).classList.add('open'); }
   function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+  // eigen invoervenster in de site in plaats van prompt(): geeft de tekst terug, of null bij Annuleren
+  let askDone = null;
+  function askText(message, value) {
+    if (askDone) askDone(null);
+    $('#askMsg').textContent = message;
+    const inp = $('#askInput'); inp.value = value || '';
+    openModal('askModal');
+    setTimeout(() => { inp.focus(); inp.select(); }, 0);
+    return new Promise((res) => { askDone = (v) => { askDone = null; closeModal('askModal'); res(v); }; });
+  }
+  $('#askOk').onclick = () => askDone && askDone($('#askInput').value);
+  $('#askNo').onclick = () => askDone && askDone(null);
+  $('#askInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); if (askDone) askDone($('#askInput').value); }
+    if (e.key === 'Escape') { e.preventDefault(); if (askDone) askDone(null); }
+  });
+  new MutationObserver(() => { if (askDone && !$('#askModal').classList.contains('open')) askDone(null); })
+    .observe($('#askModal'), { attributes: true, attributeFilter: ['class'] });
 
   // ---------- knoppen ----------
   document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => b.closest('.modal-bg').classList.remove('open')));
