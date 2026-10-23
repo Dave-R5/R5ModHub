@@ -16,7 +16,7 @@ const inApp = (url) => url.startsWith(START_URL);
 // Bij het starten (en elke 4 uur) wordt stilletjes gezocht; downloaden doe je in
 // Instellingen > Windows-app. Is een update gedownload maar niet geïnstalleerd, dan gebeurt
 // dat bij het afsluiten.
-const RELEASES_URL = 'https://github.com/Dave-R5/modweergave/releases';
+const RELEASES_URL = 'https://github.com/Dave-R5/R5ModHub/releases';
 const newer = (a, b) => {
   const x = a.split('.').map(Number), y = b.split('.').map(Number);
   for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);

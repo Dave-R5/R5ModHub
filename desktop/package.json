@@ -1,7 +1,7 @@
 {
   "name": "modweergave",
   "productName": "R5 ModHub",
-  "version": "1.7.5",
+  "version": "1.8.0",
   "description": "R5 ModHub, modtool voor Twitch, als Windows-app (laadt r5mod.daver5.nl)",
   "main": "main.js",
   "author": "Dave",
@@ -37,11 +37,11 @@
     "publish": [
       {
         "provider": "generic",
-        "url": "https://github.com/Dave-R5/modweergave/releases/latest/download"
+        "url": "https://github.com/Dave-R5/R5ModHub/releases/latest/download"
       }
     ]
   },
-  "repository": "github:Dave-R5/modweergave",
+  "repository": "github:Dave-R5/R5ModHub",
   "dependencies": {
     "electron-updater": "^6.8.9"
   }
