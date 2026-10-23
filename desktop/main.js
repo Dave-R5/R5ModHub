@@ -324,6 +324,43 @@ ipcMain.on('r5:rq-close', (e, ch) => {
   v.webContents.close();
   rq.delete(ch);
 });
+// Poll in een kanaal waar je mod bent: Twitch laat apps dat niet via de API doen, wel via de eigen
+// chat. Open de popout-chat van dat kanaal in een venster van de app (je bent daar al ingelogd)
+// en typ er /poll in, zodat meteen het pollscherm van Twitch verschijnt.
+const pollWins = new Map();
+ipcMain.on('r5:open-poll', (e, ch) => {
+  if (!fromSite(e) || !win || !okChan(ch)) return;
+  const old = pollWins.get(ch);
+  if (old && !old.isDestroyed()) { old.focus(); return; }
+  const w = new BrowserWindow({
+    width: 460, height: 760, parent: win, title: 'Poll · ' + ch, autoHideMenuBar: true, backgroundColor: '#0e0e10',
+    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
+  });
+  pollWins.set(ch, w);
+  w.on('closed', () => pollWins.delete(ch));
+  w.webContents.setUserAgent(chromeUA(w));
+  w.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+  w.webContents.once('did-finish-load', async () => {
+    // wachten tot het chatveld er is, dan /poll typen en op Enter drukken
+    for (let i = 0; i < 40 && !w.isDestroyed(); i++) {
+      const ok = await w.webContents.executeJavaScript(
+        "(() => { const el = document.querySelector('[data-a-target=\"chat-input\"]'); if (!el) return false; el.focus(); return true; })()").catch(() => false);
+      if (ok) {
+        await w.webContents.insertText('/poll');
+        setTimeout(() => {
+          if (w.isDestroyed()) return;
+          w.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
+          w.webContents.sendInputEvent({ type: 'char', keyCode: '\r' });
+          w.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
+        }, 400);
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  });
+  w.loadURL('https://www.twitch.tv/popout/' + ch + '/chat');
+});
+
 const closeAllRq = () => { rq.forEach((v) => { try { win.contentView.removeChildView(v); v.webContents.close(); } catch {} }); rq.clear(); };
 
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });

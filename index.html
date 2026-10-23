@@ -672,9 +672,9 @@
       <summary><span class="hi">📜</span>Changelog<small>wat is er veranderd</small></summary>
       <div class="cl">
         <details class="cl-ver" open>
-          <summary>Nieuw sinds 1.6.0 <small>23 okt 2026</small></summary>
+          <summary>Versie 1.6.5 <small>23 okt 2026</small></summary>
           <ul>
-            <li><b>/-commando's</b>: typ / in de chat voor een lijst met alle commando's en uitleg (zoals /ban, /timeout, /slow, /announce, /shoutout, /warn). Ze werken nu echt; log één keer opnieuw in voor /announce, /shoutout, /warn en /poll. /poll start in je eigen kanaal meteen; in kanalen waar je mod bent opent een chatvenster van Twitch waarin je /poll typt.</li>
+            <li><b>/-commando's</b>: typ / in de chat voor een lijst met alle commando's en uitleg (zoals /ban, /timeout, /slow, /announce, /shoutout, /warn). Ze werken nu echt; log één keer opnieuw in voor /announce, /shoutout, /warn en /poll. /poll start in je eigen kanaal meteen. In kanalen waar je mod bent opent de Windows-app een venster met het pollscherm van Twitch; in de browser opent een chatvenster van Twitch waarin je /poll typt.</li>
             <li><b>Kijkersgrafiek</b>: de raidstreep blijft nu ook na herladen staan, net als de gamestreep.</li>
             <li><b>Beloningsverzoeken</b> (app): ⟳-knop om de wachtrij te vernieuwen, en het blok is weer kleiner te maken via de hoek rechtsonder.</li>
           </ul>
@@ -1647,6 +1647,8 @@
     }],
     ['poll', '[duur] <vraag> | <optie> | <optie> …', 'Start een poll (2 tot 5 opties, standaard 2 minuten), bijv. /poll 5m Welke game? | Minecraft | Fortnite. In kanalen waar je mod bent opent een klein chatvenster van Twitch, typ daar /poll (Twitch laat mods geen polls starten via apps).', async (c, a, raw) => {
       if (c !== state.me.login) {
+        // Windows-app vanaf 1.6.5: venster in de app dat zelf /poll in de Twitch-chat typt
+        if (window.r5app && window.r5app.openPoll) { window.r5app.openPoll(c); return null; }
         window.open('https://www.twitch.tv/popout/' + c + '/chat', 'poll-' + c, 'width=420,height=720');
         toast('Twitch laat mods alleen in hun eigen chat een poll starten. Typ /poll in het chatvenster dat net openging.', 'ok');
         return null;
