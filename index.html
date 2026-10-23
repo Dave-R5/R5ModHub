@@ -674,7 +674,7 @@
         <details class="cl-ver" open>
           <summary>Nieuw sinds 1.6.0 <small>23 okt 2026</small></summary>
           <ul>
-            <li><b>/-commando's</b>: typ / in de chat voor een lijst met alle commando's en uitleg (zoals /ban, /timeout, /slow, /announce, /shoutout, /warn). Ze werken nu echt; log één keer opnieuw in voor /announce, /shoutout en /warn.</li>
+            <li><b>/-commando's</b>: typ / in de chat voor een lijst met alle commando's en uitleg (zoals /ban, /timeout, /slow, /announce, /shoutout, /warn). Ze werken nu echt; log één keer opnieuw in voor /announce, /shoutout, /warn en /poll. /poll kan alleen in je eigen kanaal (Twitch laat mods geen polls starten via apps).</li>
             <li><b>Kijkersgrafiek</b>: de raidstreep blijft nu ook na herladen staan, net als de gamestreep.</li>
             <li><b>Beloningsverzoeken</b> (app): ⟳-knop om de wachtrij te vernieuwen, en het blok is weer kleiner te maken via de hoek rechtsonder.</li>
           </ul>
@@ -812,7 +812,7 @@
   'use strict';
   const SCOPES = ['chat:read', 'chat:edit', 'moderator:manage:banned_users', 'moderator:manage:chat_messages', 'user:read:emotes', 'moderator:read:chatters', 'user:read:moderated_channels', 'moderation:read', 'channel:read:vips', 'moderator:manage:shield_mode', 'moderator:manage:chat_settings',
     'moderator:read:blocked_terms', 'moderator:read:unban_requests', 'moderator:read:warnings', 'moderator:read:moderators', 'moderator:read:vips',
-    'channel:read:polls', 'channel:read:redemptions', 'moderator:manage:announcements', 'moderator:manage:shoutouts', 'moderator:manage:warnings'];
+    'channel:read:polls', 'channel:read:redemptions', 'moderator:manage:announcements', 'moderator:manage:shoutouts', 'moderator:manage:warnings', 'channel:manage:polls'];
   const MAX_MSGS = 300;
   // Client ID van de gedeelde Twitch-app van deze site: hiermee kan iedereen direct inloggen.
   // Een Client ID is openbaar (geen wachtwoord), dus hij mag in de code staan.
@@ -1644,6 +1644,15 @@
       const [bid, uid] = await Promise.all([channelId(c), userIdOf(a[0])]);
       await helix('POST', 'chat/shoutouts', { from_broadcaster_id: bid, to_broadcaster_id: uid, moderator_id: state.me.user_id });
       return [a[0], 'shoutout'];
+    }],
+    ['poll', '[duur] <vraag> | <optie> | <optie> …', 'Start een poll (2 tot 5 opties, standaard 2 minuten), bijv. /poll 5m Welke game? | Minecraft | Fortnite. Kan alleen in je eigen kanaal: Twitch laat mods geen polls starten via apps, daar opent de modweergave van Twitch.', async (c, a, raw) => {
+      if (c !== state.me.login) { window.open('https://www.twitch.tv/moderator/' + c, '_blank'); throw new Error('mods kunnen via apps geen poll starten; start hem in de modweergave van Twitch (net geopend)'); }
+      const m = raw.match(/^(\d+[smh]?)\s+([\s\S]*)$/i);
+      const dur = m ? durSec(m[1], 120) : 120, parts = (m ? m[2] : raw).split('|').map((x) => x.trim()).filter(Boolean);
+      if (parts.length < 3 || parts.length > 6) throw new Error('geef een vraag en 2 tot 5 opties, gescheiden door |');
+      if (isNaN(dur) || dur < 15 || dur > 1800) throw new Error('duur moet tussen 15 s en 30 min liggen');
+      await helix('POST', 'polls', null, { broadcaster_id: state.me.user_id, title: parts[0].slice(0, 60), choices: parts.slice(1).map((t) => ({ title: t.slice(0, 25) })), duration: dur });
+      return ['', 'poll gestart: ' + parts[0]];
     }],
     ['me', '<tekst>', 'Bericht in schuine tekst (actie), zoals op Twitch.', (c, a, raw) => { sendChat(c, '\u0001ACTION ' + raw + '\u0001'); return null; }],
     ['user', '<naam>', 'Open het kaartje van iemand (notities, modacties).', (c, a) => { window.open('https://www.twitch.tv/popout/' + c + '/viewercard/' + encodeURIComponent(a[0]), '_blank'); return null; }],
