@@ -175,7 +175,7 @@
   .zone-head .uptime { color: #ff4f4f; font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
   .zone-head .uptime:empty, .zone-head .vcount:empty { display: none; }
   .zone-head .vcount { color: #ff4f4f; font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; margin-left: 8px; white-space: nowrap; }
-  .zone.stream .player-slot { flex: 1; margin-bottom: 14px; }
+  .zone.stream .player-slot, .zone.twchat .player-slot { flex: 1; margin-bottom: 14px; }
   #players { position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 5; }
   #players .pl { position: fixed; display: flex; background: #000; }
   #players .pl iframe { flex: 1; border: 0; width: 100%; height: 100%; }
@@ -409,6 +409,7 @@
       <option value="modlog">Modlog van dit kanaal</option>
       <option value="graph">Kijkersgrafiek</option>
       <option value="rewards">Beloningsverzoeken (wachtrij)</option>
+      <option value="twchat">Twitch-chat (origineel, ingebouwd)</option>
     </select>
     <div id="zoneNameWrap">
     <label for="zoneName">Kanaalnaam (zoals in twitch.tv/<b>naam</b>)</label>
@@ -649,6 +650,7 @@
       <ul>
         <li><b>📋 Modlog</b>: modacties van alle mods in jouw kanalen, met wie het deed. Doorzoekbaar per kanaal.</li>
         <li><b>🔔 Meldingen</b> als een kanaal live gaat of als iemand jou noemt (aan te zetten in ⚙).</li>
+        <li><b>Twitch-chat (origineel)</b>: de echte chat van Twitch als blok, met polls, voorspellingen en kanaalpunten zoals op Twitch zelf.</li>
         <li><b>Beloningsverzoeken</b>: blok per kanaal met de wachtrij van Twitch (goedkeuren of weigeren als mod). In de Windows-app staat hij in het blok, in de browser opent hij in een eigen venster.</li>
         <li><b>Kijkersgrafiek</b> met export naar Excel (CSV). De streamkop toont live-tijd en kijkers.</li>
       </ul>
@@ -672,6 +674,12 @@
       <summary><span class="hi">📜</span>Changelog<small>wat is er veranderd</small></summary>
       <div class="cl">
         <details class="cl-ver" open>
+          <summary>Nieuw sinds 1.6.5 <small>23 okt 2026</small></summary>
+          <ul>
+            <li><b>Twitch-chat (origineel)</b>: nieuw blok (via + Zone of ✎ op een tabblad) met de echte chat van Twitch ingebouwd, inclusief polls, voorspellingen en kanaalpunten.</li>
+          </ul>
+        </details>
+        <details class="cl-ver">
           <summary>Versie 1.6.5 <small>23 okt 2026</small></summary>
           <ul>
             <li><b>/-commando's</b>: typ / in de chat voor een lijst met alle commando's en uitleg (zoals /ban, /timeout, /slow, /announce, /shoutout, /warn). Ze werken nu echt; log één keer opnieuw in voor /announce, /shoutout, /warn en /poll. /poll start in je eigen kanaal meteen. In kanalen waar je mod bent opent de Windows-app een venster met het pollscherm van Twitch; in de browser opent een chatvenster van Twitch waarin je /poll typt.</li>
@@ -1138,7 +1146,7 @@
   }
 
   // ✎ op een tabblad: naam en per blok een schakelaar
-  const TE_KINDS = [['stream', '📺 Stream'], ['chat', '💬 Chat'], ['users', '👥 Kijkers'], ['graph', '📈 Kijkersgrafiek'], ['modlog', '📋 Modlog'], ['rewards', '🎁 Beloningsverzoeken']];
+  const TE_KINDS = [['stream', '📺 Stream'], ['chat', '💬 Chat'], ['users', '👥 Kijkers'], ['graph', '📈 Kijkersgrafiek'], ['modlog', '📋 Modlog'], ['rewards', '🎁 Beloningsverzoeken'], ['twchat', '🟣 Twitch-chat (origineel)']];
   function openTabEdit(id) {
     if (state.tab !== id) switchTab(id);
     const t = curTab();
@@ -1223,9 +1231,9 @@
   // Een chatzone per kanaal; staat hetzelfde kanaal in meerdere tabbladen,
   // dan verhuist dezelfde zone mee naar het tabblad dat open is.
   const zoneEls = {};
-  const keyOf = (z) => z.kind === 'buttons' ? 'buttons' : (['stream', 'users', 'modlog', 'graph', 'rewards'].includes(z.kind) ? z.kind + ':' : '') + z.channel;
+  const keyOf = (z) => z.kind === 'buttons' ? 'buttons' : (['stream', 'users', 'modlog', 'graph', 'rewards', 'twchat'].includes(z.kind) ? z.kind + ':' : '') + z.channel;
   const buildAny = (z) => z.kind === 'stream' ? buildStream(z) : z.kind === 'buttons' ? buildPad(z) : z.kind === 'users' ? buildUsers(z)
-    : z.kind === 'modlog' ? buildModlogZone(z) : z.kind === 'graph' ? buildGraphZone(z) : z.kind === 'rewards' ? buildRewardsZone(z) : buildZone(z);
+    : z.kind === 'modlog' ? buildModlogZone(z) : z.kind === 'graph' ? buildGraphZone(z) : z.kind === 'rewards' ? buildRewardsZone(z) : z.kind === 'twchat' ? buildTwChatZone(z) : buildZone(z);
 
   function renderZones() {
     const wrap = $('#zones');
@@ -2133,6 +2141,29 @@
     return '<div class="ml-row"><span class="time">' + day + hhmm(d) + '</span><span class="what">' + (x.mod ? '<span class="mod">' + esc(x.mod) + '</span> → ' : '') +
       (x.user ? '<b>' + esc(x.user) + '</b>: ' : '') + esc(x.what) + '</span>' + (withCh ? '<span class="ch">' + esc(x.ch) + '</span>' : '') + '</div>';
   }
+  // De echte chat van Twitch (ingebouwd zoals Twitch dat toestaat), met alles van Twitch zelf:
+  // polls, voorspellingen, kanaalpunten. Staat net als de speler in de losse laag (#players),
+  // zodat hij niet opnieuw laadt bij wisselen van tabblad of verschuiven.
+  function buildTwChatZone(z) {
+    const zone = makeShell(z, '🟣 Twitch-chat ' + z.channel, '');
+    const host = location.hostname;
+    if (!host || z.channel === 'demo') {
+      zone.root.insertAdjacentHTML('beforeend', '<div class="player-off">' + (z.channel === 'demo'
+        ? 'Hier komt de originele chat van Twitch.' : 'De Twitch-chat werkt zodra de pagina online staat.') + '</div>');
+      return zone;
+    }
+    zone.slot = document.createElement('div');
+    zone.slot.className = 'player-slot';
+    zone.root.appendChild(zone.slot);
+    zone.player = document.createElement('div');
+    zone.player.className = 'pl';
+    const f = document.createElement('iframe');
+    f.src = 'https://www.twitch.tv/embed/' + encodeURIComponent(z.channel) + '/chat?' + new URLSearchParams({ parent: host, darkpopout: '' });
+    zone.player.appendChild(f);
+    $('#players').appendChild(zone.player);
+    return zone;
+  }
+
   // Beloningsverzoeken: Twitch geeft de wachtrij via de API alleen aan de streamer en laat de pagina
   // niet inbouwen, dus een knop die Twitch' eigen wachtrij opent (daar ben je als mod ingelogd)
   // In de Windows-app (vanaf 1.6.0) legt de app de wachtrij als losse weergave over het blok (syncRewards).
