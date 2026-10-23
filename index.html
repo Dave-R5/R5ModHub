@@ -715,6 +715,7 @@
           <summary>Nieuw sinds 1.8.0 <small>23 okt 2026</small></summary>
           <ul>
             <li><b>Stream</b>: in de kop van het streamblok staat nu de huidige game naast de kanaalnaam.</li>
+            <li><b>Modlog</b>: met 🗑 in de kop van het modlogblok maak je het log van dat kanaal leeg.</li>
             <li><b>Beloningsverzoeken</b> (app): de wachtrij gaat niet meer over de gebruikerskaart, het chatmenu of de meldingen heen.</li>
             <li><b>Kijkersgrafiek</b>: een gamewissel komt nu binnen een minuut in de grafiek (Twitch gaf de nieuwe game soms pas veel later door).</li>
             <li><b>Beloningsverzoeken</b> (app): de wachtrij verdwijnt als je een stream op volledig scherm zet en komt terug als je dat weer uitzet.</li>
@@ -2399,8 +2400,14 @@
   }
 
   function buildModlogZone(z) {
-    const zone = makeShell(z, '📋 Modlog ' + z.channel, '');
+    const zone = makeShell(z, '📋 Modlog ' + z.channel, '<button class="icon" data-act="mlclear" title="Modlog van dit kanaal leegmaken">🗑</button>');
     zone.root.insertAdjacentHTML('beforeend', '<div class="ml-list"></div>');
+    zone.root.querySelector('[data-act=mlclear]').onclick = (e) => {
+      e.stopPropagation();
+      if (!confirm('Modlog van ' + z.channel + ' leegmaken?')) return;
+      modlog = modlog.filter((x) => x.ch !== z.channel); store.set('modlog', modlog);
+      zone.redraw();
+    };
     zone.list = zone.root.querySelector('.ml-list');
     zone.redraw = () => {
       const rows = modlog.filter((x) => x.ch === z.channel).slice(-150).reverse();
