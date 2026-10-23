@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('r5app', {
   // beloningswachtrij van Twitch als losse weergave over een blok (zie main.js)
   rewardsShow: (ch, r) => ipcRenderer.send('r5:rq-show', String(ch), { x: +r.x || 0, y: +r.y || 0, w: +r.w || 0, h: +r.h || 0 }),
   rewardsClose: (ch) => ipcRenderer.send('r5:rq-close', String(ch)),
+  // poll starten in een kanaal waar je mod bent (venster met de chat van Twitch, zie main.js)
+  openPoll: (ch) => ipcRenderer.send('r5:open-poll', String(ch)),
   prompt: (message, value) => ipcRenderer.sendSync('r5:prompt', String(message ?? ''), value == null ? '' : String(value)),
 });
 
