@@ -487,6 +487,48 @@ ipcMain.on('r5:web-mute', (e, key, on) => {
   const v = web.get(key);
   if (v) v.webContents.setAudioMuted(!!on);
 });
+// Inloggen bij YouTube, TikTok of Instagram in een eigen venster. Dat venster en de blokken delen
+// dezelfde cookies, dus daarna sta je in de blokken ingelogd. Bij sluiten laden de blokken opnieuw.
+const LOGIN = {
+  yt: { url: 'https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fwww.youtube.com%2F', site: 'youtube.com', cookie: ['SAPISID', 'LOGIN_INFO'], done: /^https:\/\/(www\.)?youtube\.com\/?(\?|$)/ },
+  tt: { url: 'https://www.tiktok.com/login', site: 'tiktok.com', cookie: ['sessionid'], done: /^https:\/\/(www\.)?tiktok\.com\/(foryou|\?|$)/ },
+  ig: { url: 'https://www.instagram.com/accounts/login/', site: 'instagram.com', cookie: ['sessionid'], done: /^https:\/\/(www\.)?instagram\.com\/?(\?|$)/ },
+};
+const loggedIn = async (k) => (await session.defaultSession.cookies.get({ domain: LOGIN[k].site })).some((c) => LOGIN[k].cookie.includes(c.name));
+ipcMain.handle('r5:web-login-state', async (e) => {
+  if (!fromSite(e)) return null;
+  const out = {};
+  for (const k of Object.keys(LOGIN)) out[k] = await loggedIn(k).catch(() => false);
+  return out;
+});
+const loginWins = {};
+ipcMain.on('r5:web-login', (e, k) => {
+  if (!fromSite(e) || !win || !LOGIN[k]) return;
+  if (loginWins[k] && !loginWins[k].isDestroyed()) { loginWins[k].focus(); return; }
+  const w = new BrowserWindow({
+    width: 520, height: 760, parent: win, title: 'Inloggen', autoHideMenuBar: true, backgroundColor: '#ffffff',
+    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
+  });
+  loginWins[k] = w;
+  w.webContents.setUserAgent(chromeUA(w));
+  w.webContents.setWindowOpenHandler(({ url }) => {
+    // inlogpop-ups (bijv. via Google of Facebook) in hetzelfde venster openen
+    if (webOk(url) || /^https:\/\/([a-z0-9-]+\.)*(facebook\.com|apple\.com|twitter\.com|x\.com)\//.test(url)) { w.loadURL(url); return { action: 'deny' }; }
+    if (/^https?:/.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  // terug op de startpagina van het platform = ingelogd: venster dicht
+  const check = (_e, url) => { if (LOGIN[k].done.test(url)) loggedIn(k).then((ok) => { if (ok && !w.isDestroyed()) w.close(); }); };
+  w.webContents.on('did-navigate', check);
+  w.webContents.on('did-navigate-in-page', check);
+  w.on('closed', () => {
+    delete loginWins[k];
+    web.forEach((v, key) => { if (key.startsWith(k + ':')) v.webContents.loadURL(v.url); });
+    if (win && !win.isDestroyed()) win.webContents.send('r5:web-login-done', k);
+  });
+  w.loadURL(LOGIN[k].url);
+});
+
 // YouTube: de video van de livestream die nu loopt op een kanaal (@naam). De site kan dat zelf niet
 // opvragen (geen toegang tot youtube.com vanuit de browser), de app wel.
 ipcMain.handle('r5:yt-live', async (e, handle) => {

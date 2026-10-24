@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld('r5app', {
   webClose: (key) => ipcRenderer.send('r5:web-close', String(key)),
   webMute: (key, on) => ipcRenderer.send('r5:web-mute', String(key), !!on),
   ytLive: (handle) => ipcRenderer.invoke('r5:yt-live', String(handle)),
+  webLogin: (kind) => ipcRenderer.send('r5:web-login', String(kind)),
+  webLoginState: () => ipcRenderer.invoke('r5:web-login-state'),
+  onWebLogin: (fn) => ipcRenderer.on('r5:web-login-done', (_e, kind) => fn(kind)),
   // poll starten in een kanaal waar je mod bent (venster met de chat van Twitch, zie main.js)
   openPoll: (ch) => ipcRenderer.send('r5:open-poll', String(ch)),
   prompt: (message, value) => ipcRenderer.sendSync('r5:prompt', String(message ?? ''), value == null ? '' : String(value)),
