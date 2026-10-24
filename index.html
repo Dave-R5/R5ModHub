@@ -580,10 +580,6 @@
         <button id="exeCheck">Zoeken naar updates</button>
         <button class="primary" id="exeDownload" hidden>Downloaden</button>
       </div>
-      <div id="betaTvBox" hidden>
-        <label class="optrow"><input type="checkbox" id="betaTv"> 🧪 BETA: echte twitch.tv-speler in het streamblok</label>
-        <div class="hint">Telt mee voor kanaalpunten en je kijkreeks (de gewone ingesloten speler doet dat niet). Werkt het niet goed? Zet het vinkje uit, dan heb je de oude speler terug.</div>
-      </div>
     </div>
     <div class="row"><button data-close>Sluiten</button></div>
   </div>
@@ -725,14 +721,8 @@
         <details class="cl-ver" open>
           <summary>Versie 1.9.0 <small>24 okt 2026</small></summary>
           <ul>
-            <li><b>🧪 BETA twitch.tv-speler</b> (Windows-app): het streamblok toont nu alleen de video over het hele blok, zonder de rest van de twitch.tv-pagina en chat.</li>
-          </ul>
-        </details>
-        <details class="cl-ver">
-          <summary>Versie 1.8.5 <small>24 okt 2026</small></summary>
-          <ul>
+            <li><b>Stream</b> (Windows-app): de livestream komt nu rechtstreeks van Twitch. Daardoor behoud je je kijkreeks en verdien je kanaalpunten.</li>
             <li><b>Stream</b>: in de kop van het streamblok staat nu de huidige game naast de kanaalnaam.</li>
-            <li><b>🧪 BETA</b> (Windows-app): in ⚙ Instellingen &gt; Windows-app kun je de echte twitch.tv-speler aanzetten in het streamblok. Die telt mee voor kanaalpunten en je kijkreeks. Vinkje uit = weer de oude speler.</li>
             <li><b>+ Tabblad</b> en tabblad hernoemen: het invulvenster zit nu in R5 ModHub zelf. In de app opende het soms op een ander scherm, waardoor de app leek vast te lopen.</li>
             <li><b>Modlog</b>: met 🗑 in de kop van het modlogblok maak je het log van dat kanaal leeg.</li>
             <li><b>Beloningsverzoeken</b> (app): de wachtrij gaat niet meer over de gebruikerskaart, het chatmenu of de meldingen heen.</li>
@@ -2122,8 +2112,8 @@
     zone.timer = setInterval(() => { if (zone.root.isConnected) zone.poll(); }, 60000);
     zone.tickT = setInterval(tick, 1000);
     const host = location.hostname;
-    if (tvBeta() && z.channel !== 'demo') {
-      // BETA (Windows-app): de echte speler van twitch.tv, door de app over dit vak gelegd (syncRewards)
+    if (tvApp() && z.channel !== 'demo') {
+      // Windows-app: de echte speler van twitch.tv, door de app over dit vak gelegd (syncRewards)
       zone.tvSlot = document.createElement('div');
       zone.tvSlot.className = 'player-slot';
       zone.root.appendChild(zone.tvSlot);
@@ -2164,8 +2154,8 @@
     return zone;
   }
 
-  // BETA-schakelaar in Instellingen > Windows-app (alleen in de app vanaf 1.8.5)
-  const tvBeta = () => !!(window.r5app && window.r5app.tvShow) && store.get('betaTv', false);
+  // Windows-app vanaf 1.8.5: de echte speler van twitch.tv (telt mee voor kanaalpunten en kijkreeks)
+  const tvApp = () => !!(window.r5app && window.r5app.tvShow);
   const overlayOpen = () => !!document.querySelector('.modal-bg.open, #picker:not([hidden]), #card:not([hidden])');
   function resumePlayers() {
     if (document.hidden || overlayOpen()) return;
@@ -4142,11 +4132,6 @@
   // Windows-app (.exe): zoeken naar updates. Alleen de .exe heeft window.r5app.
   if (window.r5app) {
     $('#exeBox').hidden = false;
-    if (window.r5app.tvShow) {
-      $('#betaTvBox').hidden = false;
-      $('#betaTv').checked = store.get('betaTv', false);
-      $('#betaTv').onchange = () => { store.set('betaTv', $('#betaTv').checked); location.reload(); };
-    }
     if (window.r5app.update) {
       // 1.7.5+: in-place update (zoeken, downloaden met voortgang, installeren en herstarten)
       let told = '';
