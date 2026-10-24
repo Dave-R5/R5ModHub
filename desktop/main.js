@@ -387,7 +387,61 @@ ipcMain.on('r5:open-poll', (e, ch) => {
   w.loadURL('https://www.twitch.tv/popout/' + ch + '/chat');
 });
 
-const closeAllRq = () => { rq.forEach((v) => { try { win.contentView.removeChildView(v); v.webContents.close(); } catch {} }); rq.clear(); };
+// BETA: de echte speler van twitch.tv in het streamblok, in plaats van de ingesloten speler.
+// Twitch telt kijken in een ingesloten speler niet mee voor kanaalpunten en kijkreeksen; op de
+// eigen kanaalpagina wel. De app laadt twitch.tv/<kanaal> als losse weergave over het blok en
+// laat met wat CSS alleen de video zien. Uit te zetten in Instellingen (dan weer de oude speler).
+const tv = new Map(); // kanaal -> WebContentsView
+const TV_CSS = `
+  html, body { overflow: hidden !important; background: #000 !important; }
+  nav, .top-nav, [data-a-target="top-nav-container"] { display: none !important; }
+  .video-player, [data-a-target="video-player"] {
+    position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important;
+    max-height: none !important; z-index: 2147483646 !important; background: #000 !important; }`;
+const tvPage = (ch) => 'https://www.twitch.tv/' + ch;
+ipcMain.on('r5:tv-show', (e, ch, r) => {
+  if (!fromSite(e) || !win || !okChan(ch) || !r) return;
+  let v = tv.get(ch);
+  if (!v) {
+    // backgroundThrottling uit: blijft spelen als het blok even niet te zien is (ander tabblad)
+    v = new WebContentsView({ webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false } });
+    v.setBackgroundColor('#000000');
+    v.webContents.setUserAgent(chromeUA(v));
+    v.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+    // alleen de kanaalpagina zelf; klikken naar andere pagina's gaan naar de gewone browser
+    const own = (url) => url.split(/[?#]/)[0].replace(/\/$/, '').toLowerCase() === tvPage(ch);
+    v.webContents.on('will-navigate', (ev, url) => { if (!own(url)) { ev.preventDefault(); shell.openExternal(url); } });
+    // twitch.tv wisselt ook van pagina zonder te herladen; dan terug naar het kanaal
+    v.webContents.on('did-navigate-in-page', (ev, url, isMain) => {
+      if (isMain && !own(url)) { shell.openExternal(url); v.webContents.loadURL(tvPage(ch)); }
+    });
+    v.webContents.on('dom-ready', () => v.webContents.insertCSS(TV_CSS).catch(() => {}));
+    v.webContents.loadURL(tvPage(ch));
+    win.contentView.addChildView(v);
+    tv.set(ch, v);
+    v.size = { width: 640, height: 360 };
+  }
+  const z = win.webContents.getZoomFactor();
+  if (r.w > 0 && r.h > 0) {
+    v.size = { width: Math.round(r.w * z), height: Math.round(r.h * z) };
+    v.setBounds({ x: Math.round(r.x * z), y: Math.round(r.y * z), ...v.size });
+  } else {
+    // niet te zien: buiten beeld zetten in plaats van verbergen, zodat de stream doorspeelt
+    v.setBounds({ x: -20000, y: 0, ...v.size });
+  }
+});
+ipcMain.on('r5:tv-close', (e, ch) => {
+  if (!fromSite(e) || !win) return;
+  const v = tv.get(ch);
+  if (!v) return;
+  win.contentView.removeChildView(v);
+  v.webContents.close();
+  tv.delete(ch);
+});
+
+const closeAllRq = () => {
+  [rq, tv].forEach((m) => { m.forEach((v) => { try { win.contentView.removeChildView(v); v.webContents.close(); } catch {} }); m.clear(); });
+};
 
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
 app.whenReady().then(() => {
