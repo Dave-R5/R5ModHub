@@ -1,6 +1,6 @@
 // R5 ModHub desktop-app: een venster dat de live site laadt.
 // Updates van de site komen dus vanzelf mee; de app zelf werkt zich bij via GitHub-releases.
-const { app, BrowserWindow, WebContentsView, shell, Menu, ipcMain, session, dialog } = require('electron');
+const { app, BrowserWindow, WebContentsView, shell, Menu, ipcMain, session, dialog, net } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const http = require('http');
@@ -445,8 +445,66 @@ ipcMain.on('r5:tv-close', (e, ch) => {
   tv.delete(ch);
 });
 
+// Multi-modus: chat van YouTube en de livepagina van TikTok en Instagram als losse weergave over
+// een blok. Alleen pagina's van die sites; inloggen gebeurt in de weergave zelf.
+const WEB_SITES = ['youtube.com', 'google.com', 'tiktok.com', 'instagram.com'];
+const webOk = (url) => {
+  try { const u = new URL(url); return u.protocol === 'https:' && WEB_SITES.some((d) => u.hostname === d || u.hostname.endsWith('.' + d)); } catch { return false; }
+};
+const web = new Map(); // sleutel -> WebContentsView
+const okKey = (k) => typeof k === 'string' && /^[a-z]{2}:[A-Za-z0-9_.@-]{1,60}$/.test(k);
+ipcMain.on('r5:web-show', (e, key, url, r, muted) => {
+  if (!fromSite(e) || !win || !okKey(key) || !r) return;
+  let v = web.get(key);
+  if (v && v.url !== url) { win.contentView.removeChildView(v); v.webContents.close(); web.delete(key); v = null; }
+  if (!v) {
+    if (!webOk(url)) return;
+    v = new WebContentsView({ webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false } });
+    v.url = url;
+    v.setBackgroundColor('#0e0e10');
+    v.webContents.setUserAgent(chromeUA(v));
+    v.webContents.setAudioMuted(!!muted);
+    v.webContents.setWindowOpenHandler(({ url: u }) => { if (/^https?:/.test(u)) shell.openExternal(u); return { action: 'deny' }; });
+    v.webContents.on('will-navigate', (ev, u) => { if (!webOk(u)) { ev.preventDefault(); shell.openExternal(u); } });
+    v.webContents.loadURL(url);
+    win.contentView.addChildView(v);
+    web.set(key, v);
+  }
+  const z = win.webContents.getZoomFactor();
+  v.setBounds({ x: Math.round(r.x * z), y: Math.round(r.y * z), width: Math.max(0, Math.round(r.w * z)), height: Math.max(0, Math.round(r.h * z)) });
+  v.setVisible(r.w > 0 && r.h > 0);
+});
+ipcMain.on('r5:web-close', (e, key) => {
+  if (!fromSite(e) || !win) return;
+  const v = web.get(key);
+  if (!v) return;
+  win.contentView.removeChildView(v);
+  v.webContents.close();
+  web.delete(key);
+});
+ipcMain.on('r5:web-mute', (e, key, on) => {
+  if (!fromSite(e)) return;
+  const v = web.get(key);
+  if (v) v.webContents.setAudioMuted(!!on);
+});
+// YouTube: de video van de livestream die nu loopt op een kanaal (@naam). De site kan dat zelf niet
+// opvragen (geen toegang tot youtube.com vanuit de browser), de app wel.
+ipcMain.handle('r5:yt-live', async (e, handle) => {
+  if (!fromSite(e) || !/^@?[A-Za-z0-9_.-]{1,60}$/.test(String(handle))) return null;
+  try {
+    const res = await net.fetch('https://www.youtube.com/' + (String(handle).startsWith('@') ? '' : '@') + handle + '/live',
+      { headers: { 'User-Agent': chromeUA(win), 'Accept-Language': 'nl-NL,nl;q=0.9', Cookie: 'SOCS=CAI' } });
+    const html = await res.text();
+    // live: YouTube toont de kijkpagina van de stream; niet live: de kanaalpagina, zonder video
+    if (!/"isLive":true/.test(html)) return null;
+    const m = html.match(/"currentVideoEndpoint":\{.{0,300}?"videoId":"([\w-]{11})"/) ||
+      html.match(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/watch\?v=([\w-]{11})"/);
+    return m ? m[1] : null;
+  } catch { return null; }
+});
+
 const closeAllRq = () => {
-  [rq, tv].forEach((m) => { m.forEach((v) => { try { win.contentView.removeChildView(v); v.webContents.close(); } catch {} }); m.clear(); });
+  [rq, tv, web].forEach((m) => { m.forEach((v) => { try { win.contentView.removeChildView(v); v.webContents.close(); } catch {} }); m.clear(); });
 };
 
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });

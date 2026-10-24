@@ -106,6 +106,12 @@
   .gbox svg { position: absolute; inset: 0; width: 100%; height: 100%; }
   .gbox svg text { fill: var(--muted); font-size: 11px; }
   /* onderaan een strook vrij, zodat de hoek om te vergroten niet onder de wachtrij van de app valt */
+  .modesw { margin-left: 0; }
+  .modesw button { padding: 3px 10px; font-size: 13px; }
+  .web-frame { flex: 1; min-height: 0; width: 100%; border: 0; margin-bottom: 16px; background: #0e0e10; }
+  .web-msg { display: none; }
+  .zone.web-off .web-msg { display: block; }
+  .zone.web-off .rq-slot { display: none; }
   .rq-slot { flex: 1; min-height: 0; margin-bottom: 16px; background: #0e0e10; }
   .gsum { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 4px 8px 6px; font-size: 12px; color: var(--muted); }
   .gsum:empty { display: none; }
@@ -411,6 +417,7 @@
 <div id="app">
   <header>
     <h1>R5 ModHub</h1>
+    <span class="seg modesw" id="modeSw" title="Alleen Twitch, of Twitch samen met YouTube, TikTok en Instagram"><button data-mode="twitch">🟣 Twitch</button><button data-mode="multi">🌐 Multi</button></span>
     <button id="addZoneBtn" title="Zone toevoegen in dit tabblad">+ Zone</button>
     <button id="tidyBtn" title="Alle blokken in dit tabblad automatisch netjes naast elkaar zetten">▦ Schikken</button>
     <div id="shortcutBar"></div>
@@ -437,6 +444,18 @@
     <div class="row"><button id="askNo">Annuleren</button><button class="primary" id="askOk">OK</button></div>
   </div>
 </div>
+<div class="modal-bg" id="multiModal">
+  <div class="modal" style="max-width:460px">
+    <h2>🌐 Multi instellen</h2>
+    <p class="hint">Je Twitch-stream en -chat, met daarnaast de chat van je andere platforms. Laat leeg wat je niet gebruikt. Terug naar alleen Twitch kan altijd met de schakelaar linksboven; je Twitch-tabbladen blijven zoals ze zijn.</p>
+    <label for="mpTw">Twitch-kanaal</label><input id="mpTw" placeholder="bijv. dave_r5" autocomplete="off">
+    <label for="mpYt">YouTube (@kanaalnaam of livelink)</label><input id="mpYt" placeholder="bijv. @daver5" autocomplete="off">
+    <label for="mpTt">TikTok (@naam)</label><input id="mpTt" placeholder="bijv. @daver5" autocomplete="off">
+    <label for="mpIg">Instagram (naam)</label><input id="mpIg" placeholder="bijv. daver5" autocomplete="off">
+    <p class="hint" id="mpAppHint">TikTok en Instagram werken alleen in de Windows-app: daar staat hun livepagina in het blok.</p>
+    <div class="row"><button data-close>Annuleren</button><button class="primary" id="mpSave">Naar Multi</button></div>
+  </div>
+</div>
 <div class="modal-bg" id="zoneModal">
   <div class="modal">
     <h2>Zone toevoegen</h2>
@@ -454,7 +473,7 @@
       <option value="twchat">Twitch-chat (origineel, ingebouwd)</option>
     </select>
     <div id="zoneNameWrap">
-    <label for="zoneName">Kanaalnaam (zoals in twitch.tv/<b>naam</b>)</label>
+    <label for="zoneName" id="zoneNameLbl">Kanaalnaam (zoals in twitch.tv/<b>naam</b>)</label>
     <input id="zoneName" placeholder="bijv. streamernaam" autocomplete="off">
     <p class="hint">Typ <b>demo</b> voor een nepchat om alles uit te proberen zonder in te loggen.</p>
     </div>
@@ -719,6 +738,13 @@
       <summary><span class="hi">📜</span>Changelog<small>wat is er veranderd</small></summary>
       <div class="cl">
         <details class="cl-ver" open>
+          <summary>Versie 1.9.5 <small>24 okt 2026</small></summary>
+          <ul>
+            <li><b>🌐 Multi</b>: schakelaar linksboven naast de naam. In Multi zie je je Twitch-stream en -chat samen met de chat van YouTube, en in de Windows-app ook je livepagina van TikTok en Instagram. Multi heeft eigen tabbladen; met <b>🟣 Twitch</b> ga je terug naar je gewone indeling, die blijft zoals hij was.</li>
+            <li><b>Multi-blokken</b>: via + Zone voeg je YouTube-chat, TikTok LIVE en Instagram Live toe. In de app zoekt het YouTube-blok zelf je livestream bij je @kanaalnaam (⟳ zoekt opnieuw); in de browser plak je de livelink.</li>
+          </ul>
+        </details>
+        <details class="cl-ver">
           <summary>Versie 1.9.0 <small>24 okt 2026</small></summary>
           <ul>
             <li><b>Stream</b> (Windows-app): de livestream komt nu rechtstreeks van Twitch. Daardoor behoud je je kijkreeks en verdien je kanaalpunten.</li>
@@ -907,7 +933,7 @@
     set(k, v) { try { localStorage.setItem('modv.' + k, JSON.stringify(v)); } catch {} if (CLOUD_KEYS.includes(k)) cloudTouch(); },
     del(k) { try { localStorage.removeItem('modv.' + k); } catch {} },
   };
-  const CLOUD_KEYS = ['tabs', 'shortcuts', 'opts', 'words', 'notes', 'modlog', 'extraChans'];
+  const CLOUD_KEYS = ['tabs', 'mtabs', 'mode', 'shortcuts', 'opts', 'words', 'notes', 'modlog', 'extraChans'];
   const cloudSync = { t: null };
   // opties; de hl-* zijn de kleuren in de chat die je via ⚙ Chat aan en uit zet
   const opts = Object.assign({ hlWords: true, hlMention: true, hlFirst: true, hlEvents: true, notifyLive: false, notifyMention: false, cloudAuto: false }, store.get('opts', {}));
@@ -924,9 +950,14 @@
     document.body.classList.toggle('hl-first', opts.hlFirst);
     document.body.classList.toggle('hl-events', opts.hlEvents);
   }
+  // Twitch- of Multi-modus (schakelaar naast de naam linksboven). Multi heeft eigen tabbladen
+  // (opgeslagen als mtabs), zodat je Twitch-indeling ongemoeid blijft en je altijd terug kunt.
+  const MULTI = store.get('mode', 'twitch') === 'multi';
+  const TABS_KEY = MULTI ? 'mtabs' : 'tabs';
+  document.body.classList.toggle('multi', MULTI);
   const state = {
     tabs: loadTabs(),                        // [{id, name, zones: [{channel, kind, w, h}]}]
-    tab: store.get('tab', null),
+    tab: store.get(MULTI ? 'mtab' : 'tab', null),
     shortcuts: store.get('shortcuts', []),   // [{id, name, type, text, dur, reason, key}]
     token: store.get('token', ''),
     me: null,                                // {login, user_id, client_id}
@@ -934,13 +965,14 @@
     sel: null,                               // {channel, user, userId, msgId, el}
   };
   if (!state.tabs.some((t) => t.id === state.tab)) state.tab = state.tabs[0].id;
-  const saveTabs = () => store.set('tabs', state.tabs);
+  const saveTabs = () => store.set(TABS_KEY, state.tabs);
   const curTab = () => state.tabs.find((t) => t.id === state.tab);
   // het Hoofd-tabblad (met de kanaalknoppen) blijft dat, ook als je het verplaatst
   const mainTabId = () => (state.tabs.find((t) => t.id === 't1') || state.tabs[0]).id;
   function loadTabs() {
-    const t = store.get('tabs', null);
+    const t = store.get(TABS_KEY, null);
     if (Array.isArray(t) && t.length) return t;
+    if (MULTI) return [{ id: 't1', name: 'Hoofd', zones: [] }];
     // oude versie: losse lijst zones wordt het eerste tabblad
     return [{ id: 't1', name: 'Hoofd', zones: store.get('zones', []).map((z) => ({ kind: 'chat', ...z })) }];
   }
@@ -1263,7 +1295,7 @@
 
   function switchTab(id) {
     if (state.tab === id) return;
-    state.tab = id; store.set('tab', id);
+    state.tab = id; store.set(MULTI ? 'mtab' : 'tab', id);
     clearSel(); state.active = null;
     state.mview = null;
     renderTabs(); renderZones();
@@ -1307,9 +1339,9 @@
   // Een chatzone per kanaal; staat hetzelfde kanaal in meerdere tabbladen,
   // dan verhuist dezelfde zone mee naar het tabblad dat open is.
   const zoneEls = {};
-  const keyOf = (z) => z.kind === 'buttons' ? 'buttons' : (['stream', 'users', 'modlog', 'graph', 'rewards', 'songs', 'twchat'].includes(z.kind) ? z.kind + ':' : '') + z.channel;
+  const keyOf = (z) => z.kind === 'buttons' ? 'buttons' : (['stream', 'users', 'modlog', 'graph', 'rewards', 'songs', 'twchat', 'yt', 'tt', 'ig'].includes(z.kind) ? z.kind + ':' : '') + z.channel;
   const buildAny = (z) => z.kind === 'stream' ? buildStream(z) : z.kind === 'buttons' ? buildPad(z) : z.kind === 'users' ? buildUsers(z)
-    : z.kind === 'modlog' ? buildModlogZone(z) : z.kind === 'graph' ? buildGraphZone(z) : z.kind === 'rewards' ? buildRewardsZone(z) : z.kind === 'songs' ? buildSongsZone(z) : z.kind === 'twchat' ? buildTwChatZone(z) : buildZone(z);
+    : z.kind === 'modlog' ? buildModlogZone(z) : z.kind === 'graph' ? buildGraphZone(z) : z.kind === 'rewards' ? buildRewardsZone(z) : z.kind === 'songs' ? buildSongsZone(z) : z.kind === 'twchat' ? buildTwChatZone(z) : WEB_KINDS[z.kind] ? buildWebZone(z) : buildZone(z);
 
   function renderZones() {
     const wrap = $('#zones');
@@ -2198,6 +2230,22 @@
   const rqDrop = () => { rqDrag = false; };
   document.addEventListener('pointerup', rqDrop, true);
   window.addEventListener('blur', rqDrop);
+  function slotRect(s, modal, pops) {
+    let r = { x: 0, y: 0, w: 0, h: 0 };
+    if (!modal && s.isConnected && s.offsetParent !== null && !(document.getElementById('zones').hidden && s.closest('#zones'))) {
+      const b = s.getBoundingClientRect(), a = (s.closest('#zones') || s.closest('#mview') || document.body).getBoundingClientRect();
+      const x1 = Math.max(b.left, a.left), y1 = Math.max(b.top, a.top), x2 = Math.min(b.right, a.right), y2 = Math.min(b.bottom, a.bottom);
+      if (x2 > x1 && y2 > y1 && !pops.some((p) => p.left < x2 && p.right > x1 && p.top < y2 && p.bottom > y1)) r = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+    }
+    return r;
+  }
+  function syncWeb(z, modal, pops) {
+    const r = z.webUrl ? slotRect(z.webSlot, modal, pops) : { x: 0, y: 0, w: 0, h: 0 };
+    const k = z.webUrl + '|' + [r.x, r.y, r.w, r.h].map(Math.round).join(',');
+    if (webShown[z.webKey] === k) return;
+    webShown[z.webKey] = k;
+    if (z.webUrl) window.r5app.webShow(z.webKey, z.webUrl, r, z.webMuted);
+  }
   function syncRewards() {
     // verbergen tijdens slepen, een venster in de site of een stream op volledig scherm
     const modal = rqDrag || !!document.fullscreenElement || !!document.querySelector('.modal-bg.open, #picker:not([hidden])');
@@ -2205,6 +2253,7 @@
     // altijd bovenop, dus verbergen zolang zo'n venster over het blok valt
     const pops = [...document.querySelectorAll('#card:not([hidden]), #chatdd:not([hidden]), #bellDd:not([hidden])')].map((el) => el.getBoundingClientRect());
     Object.values(zoneEls).forEach((z) => {
+      if (z.webSlot) return syncWeb(z, modal, pops);
       const s = z.rqSlot || z.tvSlot;
       if (!s) return;
       const key = (z.tvSlot ? 'tv:' : '') + z.channel;
@@ -2219,6 +2268,7 @@
       rqShown[key] = k;
       if (z.tvSlot) window.r5app.tvShow(z.channel, r); else window.r5app.rewardsShow(z.channel, r);
     });
+    Object.keys(webShown).forEach((key) => { if (!Object.values(zoneEls).some((z) => z.webKey === key)) { delete webShown[key]; window.r5app.webClose(key); } });
     Object.keys(rqShown).forEach((key) => {
       if (key.startsWith('tv:')) { const ch = key.slice(3); if (!zoneEls['stream:' + ch]) { delete rqShown[key]; window.r5app.tvClose(ch); } }
       else if (!zoneEls['rewards:' + key]) { delete rqShown[key]; window.r5app.rewardsClose(key); }
@@ -2313,6 +2363,74 @@
   // Beloningsverzoeken: Twitch geeft de wachtrij via de API alleen aan de streamer en laat de pagina
   // niet inbouwen, dus een knop die Twitch' eigen wachtrij opent (daar ben je als mod ingelogd)
   // In de Windows-app (vanaf 1.6.0) legt de app de wachtrij als losse weergave over het blok (syncRewards).
+  // ---------- Multi: YouTube, TikTok en Instagram ----------
+  // In de Windows-app legt de app de pagina van het platform als losse weergave over het blok
+  // (net als de beloningswachtrij). In de browser kan alleen de YouTube-chat, en dan met een livelink.
+  const ytId = (v) => { const m = String(v).match(/(?:v=|youtu\.be\/|\/live\/|\/shorts\/)([\w-]{11})/); return m ? m[1] : ''; };
+  const handleOf = (v, site) => String(v).trim().replace(new RegExp('^.*' + site + '\\/'), '').replace(/^@/, '').split(/[/?#]/)[0].replace(/[^A-Za-z0-9_.-]/g, '').slice(0, 40);
+  const WEB_KINDS = {
+    yt: { icon: '▶', label: 'YouTube-chat', ask: 'YouTube: <b>@kanaalnaam</b> of een livelink', muted: false,
+      id: (v) => ytId(v) ? 'v.' + ytId(v) : (handleOf(v, 'youtube\\.com') ? '@' + handleOf(v, 'youtube\\.com') : ''),
+      page: (id) => id.startsWith('v.') ? 'https://www.youtube.com/watch?v=' + id.slice(2) : 'https://www.youtube.com/' + id + '/live' },
+    tt: { icon: '♪', label: 'TikTok LIVE', ask: 'TikTok: <b>@naam</b>', muted: true,
+      id: (v) => handleOf(v, 'tiktok\\.com') ? '@' + handleOf(v, 'tiktok\\.com').toLowerCase() : '',
+      page: (id) => 'https://www.tiktok.com/' + id + '/live' },
+    ig: { icon: '◎', label: 'Instagram Live', ask: 'Instagram: <b>naam</b>', muted: true,
+      id: (v) => handleOf(v, 'instagram\\.com').toLowerCase(),
+      page: (id) => 'https://www.instagram.com/' + id + '/live/' },
+  };
+  const webShown = {};
+  function buildWebZone(z) {
+    const K = WEB_KINDS[z.kind], app = !!(window.r5app && window.r5app.webShow);
+    const zone = makeShell(z, K.icon + ' ' + K.label + ' · ' + z.channel.replace(/^v\./, ''), '');
+    zone.webKey = z.kind + ':' + z.channel;
+    zone.root.querySelector('[data-act=open]').onclick = () => window.open(K.page(z.channel), '_blank');
+    zone.root.querySelector('[data-act=open]').title = 'Open op ' + K.label.split(' ')[0];
+    const btn = (txt, title, fn) => {
+      const b = document.createElement('button');
+      b.className = 'icon'; b.textContent = txt; b.title = title;
+      b.onclick = (e) => { e.stopPropagation(); fn(b); };
+      zone.root.querySelector('[data-act=open]').before(b);
+      return b;
+    };
+    if (app) {
+      zone.webSlot = document.createElement('div');
+      zone.webSlot.className = 'rq-slot';
+      zone.root.appendChild(zone.webSlot);
+      zone.webMuted = K.muted;
+      if (z.kind !== 'yt') btn(zone.webMuted ? '🔇' : '🔊', 'Geluid aan of uit', (b) => {
+        zone.webMuted = !zone.webMuted; b.textContent = zone.webMuted ? '🔇' : '🔊'; window.r5app.webMute(zone.webKey, zone.webMuted);
+      });
+      // YouTube via @kanaal: de app zoekt de livestream die nu loopt; ⟳ zoekt opnieuw (nieuwe stream)
+      const resolve = async () => {
+        zone.webUrl = '';
+        if (z.kind !== 'yt') { zone.webUrl = K.page(z.channel); return; }
+        let vid = z.channel.startsWith('v.') ? z.channel.slice(2) : await window.r5app.ytLive(z.channel).catch(() => null);
+        zone.webUrl = vid ? 'https://www.youtube.com/live_chat?v=' + vid : '';
+        zone.root.classList.toggle('web-off', !vid);
+      };
+      zone.root.insertAdjacentHTML('beforeend', '<div class="player-off web-msg">' + esc(z.channel) + ' is nu niet live op YouTube. Druk op ⟳ als de stream begonnen is.</div>');
+      btn('⟳', 'Vernieuwen (bij YouTube: opnieuw de livestream zoeken)', async () => {
+        window.r5app.webClose(zone.webKey); delete webShown[zone.webKey]; await resolve();
+      });
+      resolve();
+      return zone;
+    }
+    if (z.kind === 'yt' && z.channel.startsWith('v.')) {
+      const f = document.createElement('iframe');
+      f.className = 'web-frame';
+      f.src = 'https://www.youtube.com/live_chat?' + new URLSearchParams({ v: z.channel.slice(2), embed_domain: location.hostname });
+      zone.root.appendChild(f);
+      return zone;
+    }
+    zone.root.insertAdjacentHTML('beforeend', '<div class="player-off">' + (z.kind === 'yt'
+      ? 'In de browser heeft de YouTube-chat een livelink nodig (youtube.com/live/…). Verwijder dit blok en voeg het opnieuw toe met de link van je stream. In de Windows-app is je @kanaalnaam genoeg.'
+      : K.label + ' werkt alleen in de Windows-app: daar staat de livepagina hier in het blok.') +
+      '<br><br><button>Open ' + esc(K.label.split(' ')[0]) + '</button></div>');
+    zone.root.querySelector('.player-off button').onclick = () => window.open(K.page(z.channel), '_blank');
+    return zone;
+  }
+
   function buildRewardsZone(z) {
     const zone = makeShell(z, '🎁 Beloningen ' + z.channel, '');
     const url = 'https://www.twitch.tv/popout/' + encodeURIComponent(z.channel) + '/reward-queue';
@@ -2658,6 +2776,13 @@
     if (kind === 'both') { addZone(name, 'stream'); return addZone(name, 'chat'); }
     if (kind === 'all') { addZone(name, 'stream'); addZone(name, 'chat'); return addZone(name, 'users'); }
     if (kind === 'buttons') name = 'knoppen';
+    if (WEB_KINDS[kind]) {
+      const id = WEB_KINDS[kind].id(name);
+      if (!id) return toast('Ongeldige naam of link.', 'err');
+      const zs = curTab().zones, wz = { channel: id, kind };
+      if (zs.some((x) => keyOf(x) === keyOf(wz))) return toast('Dit blok staat al in dit tabblad.', 'err');
+      zs.push(wz); saveTabs(); renderZones(); return;
+    }
     const ch = name.trim().toLowerCase().replace(/^.*twitch\.tv\//, '').replace(/[^a-z0-9_]/g, '');
     if (!ch) return toast('Ongeldige kanaalnaam.', 'err');
     const zones = curTab().zones;
@@ -3885,7 +4010,37 @@
   document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => b.closest('.modal-bg').classList.remove('open')));
   $('#scModal [data-close]').onclick = closeScModal;
   document.querySelectorAll('.modal-bg').forEach((m) => m.addEventListener('mousedown', (e) => { if (e.target === m) m.classList.remove('open'); }));
-  $('#zoneKind').onchange = () => { $('#zoneNameWrap').hidden = $('#zoneKind').value === 'buttons'; };
+  if (MULTI) $('#zoneKind').insertAdjacentHTML('beforeend', '<option value="yt">YouTube-chat</option><option value="tt">TikTok LIVE (Windows-app)</option><option value="ig">Instagram Live (Windows-app)</option>');
+  $('#zoneKind').onchange = () => {
+    const k = $('#zoneKind').value;
+    $('#zoneNameWrap').hidden = k === 'buttons';
+    $('#zoneNameLbl').innerHTML = WEB_KINDS[k] ? WEB_KINDS[k].ask : 'Kanaalnaam (zoals in twitch.tv/<b>naam</b>)';
+  };
+  // Twitch / Multi: de pagina opnieuw laden met de tabbladen van die modus
+  $('#modeSw').querySelectorAll('[data-mode]').forEach((b) => {
+    b.classList.toggle('on', (b.dataset.mode === 'multi') === MULTI);
+    b.onclick = () => {
+      if ((b.dataset.mode === 'multi') === MULTI) return;
+      if (b.dataset.mode === 'twitch') { store.set('mode', 'twitch'); return location.reload(); }
+      if (store.get('mtabs', null)) { store.set('mode', 'multi'); return location.reload(); }
+      $('#mpTw').value = state.me ? state.me.login : '';
+      $('#mpAppHint').hidden = !!(window.r5app && window.r5app.webShow);
+      openModal('multiModal'); $('#mpTw').focus();
+    };
+  });
+  $('#mpSave').onclick = () => {
+    const tw = $('#mpTw').value.trim().toLowerCase().replace(/^.*twitch\.tv\//, '').replace(/[^a-z0-9_]/g, '');
+    const zones = [];
+    if (tw) zones.push({ kind: 'stream', channel: tw, w: 640, h: 420 }, { kind: 'chat', channel: tw, w: 360, h: 420 });
+    [['yt', '#mpYt'], ['tt', '#mpTt'], ['ig', '#mpIg']].forEach(([k, sel]) => {
+      const id = $(sel).value.trim() && WEB_KINDS[k].id($(sel).value);
+      if (id) zones.push({ kind: k, channel: id, w: 360, h: 420 });
+    });
+    store.set('mtabs', [{ id: 't1', name: 'Hoofd', zones: [] }, { id: 'm1', name: '🌐 Multi', channel: tw || undefined, extras: true, noButtons: true, zones }]);
+    store.set('mtab', 'm1');
+    store.set('mode', 'multi');
+    location.reload();
+  };
   $('#addZoneBtn').onclick = () => { $('#zoneName').value = ''; $('#zoneKind').onchange(); openModal('zoneModal'); $('#zoneName').focus(); };
   $('#zoneSave').onclick = () => { addZone($('#zoneName').value, $('#zoneKind').value); closeModal('zoneModal'); };
   $('#zoneName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#zoneSave').click(); });
@@ -4052,7 +4207,7 @@
     const tabs = Array.isArray(j.tabs) ? j.tabs : Array.isArray(j.zones) ? [{ id: 't1', name: 'Hoofd', zones: j.zones }] : null;
     if (tabs && tabs.length) {
       Object.keys(zoneEls).forEach((c) => { clearInterval(zoneEls[c].demoT); clearInterval(zoneEls[c].timer); clearInterval(zoneEls[c].tickT); if (zoneEls[c].player) zoneEls[c].player.remove(); delete zoneEls[c]; });
-      state.tabs = tabs; state.tab = tabs[0].id; saveTabs(); store.set('tab', state.tab);
+      state.tabs = tabs; state.tab = tabs[0].id; saveTabs(); store.set(MULTI ? 'mtab' : 'tab', state.tab);
     }
     if (j.opts) { Object.assign(opts, j.opts); saveOpts(); }
     if (Array.isArray(j.words)) { words = j.words; store.set('words', words); $('#wordsBox').value = words.join('\n'); }
