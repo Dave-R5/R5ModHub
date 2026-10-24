@@ -727,6 +727,12 @@
       <summary><span class="hi">📜</span>Changelog<small>wat is er veranderd</small></summary>
       <div class="cl">
         <details class="cl-ver" open>
+          <summary>Nieuw sinds 2.0.0</summary>
+          <ul>
+            <li><b>Tabblad bewerken</b> (✎ op een tabblad): in Multi staan YouTube, TikTok en Instagram nu onder <b>Andere platforms</b>, waar je die blokken aan- of uitzet. Ze stonden er eerst als Twitch-kanaal met een vreemde code.</li>
+          </ul>
+        </details>
+        <details class="cl-ver">
           <summary>Versie 2.0.0 <small>24 okt 2026</small></summary>
           <ul>
             <li><b>🌐 Multi voor modereren</b>: + Tabblad vraagt welk Twitch-kanaal je wilt modereren en zet stream, chat en blokken voor YouTube, TikTok en Instagram klaar. Die blokken vragen zelf welk kanaal van die streamer ze moeten tonen; met ✎ kies je later een ander kanaal.</li>
@@ -1270,7 +1276,7 @@
       d.onclick = () => { fn(!on); drawTabEdit(); };
       list.appendChild(d);
     };
-    const chans = [...new Set([t.channel, ...t.zones.filter((z) => z.kind !== 'buttons').map((z) => z.channel)].filter(Boolean))];
+    const chans = [...new Set([t.channel, ...t.zones.filter((z) => z.kind !== 'buttons' && !WEB_KINDS[z.kind]).map((z) => z.channel)].filter(Boolean))];
     if (!chans.length) list.innerHTML = '<p class="hint">Dit tabblad heeft nog geen kanaal.</p>';
     chans.forEach((ch) => {
       list.insertAdjacentHTML('beforeend', '<div class="te-ch">' + esc(ch) + '</div>');
@@ -1279,6 +1285,17 @@
         else { const z = t.zones.find((x) => (x.kind || 'chat') === kind && x.channel === ch); if (z) removeZone(z); }
       }));
     });
+    // Multi: blokken van andere platforms (aan = leeg blok dat zelf om het kanaal vraagt)
+    if (MULTI) {
+      if (!chans.length) list.innerHTML = '';
+      list.insertAdjacentHTML('beforeend', '<div class="te-ch">Andere platforms</div>');
+      Object.keys(WEB_KINDS).forEach((k) => {
+        const z = t.zones.find((x) => x.kind === k);
+        row(WEB_KINDS[k].icon + ' ' + WEB_KINDS[k].label + (z && !webEmpty(z) ? ' · ' + esc(z.channel.replace(/^v\./, '')) : ''), !!z, (on) => {
+          if (on) addZone('', k); else removeZone(z);
+        });
+      });
+    }
     if (chans.length) {
       list.insertAdjacentHTML('beforeend', '<div class="te-ch">Algemeen</div>');
       row('⚡ Sneltoetsen', has('buttons'), (on) => {
