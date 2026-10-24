@@ -13,6 +13,11 @@ contextBridge.exposeInMainWorld('r5app', {
   // BETA: echte twitch.tv-speler als losse weergave over het streamblok (zie main.js)
   tvShow: (ch, r) => ipcRenderer.send('r5:tv-show', String(ch), { x: +r.x || 0, y: +r.y || 0, w: +r.w || 0, h: +r.h || 0 }),
   tvClose: (ch) => ipcRenderer.send('r5:tv-close', String(ch)),
+  // Multi-modus: YouTube-chat, TikTok en Instagram als losse weergave over een blok (zie main.js)
+  webShow: (key, url, r, muted) => ipcRenderer.send('r5:web-show', String(key), String(url), { x: +r.x || 0, y: +r.y || 0, w: +r.w || 0, h: +r.h || 0 }, !!muted),
+  webClose: (key) => ipcRenderer.send('r5:web-close', String(key)),
+  webMute: (key, on) => ipcRenderer.send('r5:web-mute', String(key), !!on),
+  ytLive: (handle) => ipcRenderer.invoke('r5:yt-live', String(handle)),
   // poll starten in een kanaal waar je mod bent (venster met de chat van Twitch, zie main.js)
   openPoll: (ch) => ipcRenderer.send('r5:open-poll', String(ch)),
   prompt: (message, value) => ipcRenderer.sendSync('r5:prompt', String(message ?? ''), value == null ? '' : String(value)),
