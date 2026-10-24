@@ -58,7 +58,15 @@
   body.resizing #zones.free .canvas > .zone.moving, #zones.free.settling .canvas > .zone { transition: none; }
   #zones.free .zone.moving { box-shadow: 0 10px 30px rgba(0,0,0,.6); opacity: .92; }
   .snapline { position: absolute; background: var(--accent); pointer-events: none; z-index: 9999; }
-  #tidyBtn { white-space: nowrap; }
+  #layBtns { display: flex; gap: 6px; } #layBtns button { white-space: nowrap; }
+  .modal.wide { max-width: 1100px; }
+  .cust-canvas { position: relative; margin-top: 12px; background: var(--bg); border: 1px dashed var(--line); border-radius: 8px; min-height: 300px;
+    background-image: linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px); background-size: calc(100% / 24) 100%; touch-action: none; }
+  .cbox { position: absolute; background: var(--panel2); border: 1px solid var(--accent); border-radius: 6px; padding: 4px 6px; font-size: 11.5px; overflow: hidden;
+    cursor: grab; user-select: none; box-sizing: border-box; transition: top .12s ease, left .12s ease; }
+  .cbox.moving { cursor: grabbing; z-index: 3; box-shadow: 0 6px 18px rgba(0,0,0,.5); transition: none; opacity: .92; }
+  .cbox .crz { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize;
+    background: linear-gradient(135deg, transparent 50%, var(--accent) 50%, var(--accent) 62%, transparent 62%, transparent 74%, var(--accent) 74%, var(--accent) 86%, transparent 86%); }
   .zone { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
     width: 360px; height: calc(100vh - 160px); min-width: 240px; min-height: 200px; resize: both; overflow: hidden; }
   .zone.active { border-color: var(--accent); }
@@ -292,7 +300,7 @@
   @media (max-width: 768px) {
     #shortcutBar, header h1 { display: none; }
     #cloudInd { font-size: 0; } #cloudInd::before { content: '☁'; font-size: 16px; }
-    #tidyBtn { display: none; }
+    #layBtns { display: none; }
     #viewBtn, #modlogBtn { font-size: 0; } #viewBtn::before { content: '▣'; font-size: 16px; } #modlogBtn::before { content: '📋'; font-size: 16px; }
     header { gap: 6px; }
     #selInfo { order: 10; flex-basis: 100%; max-width: none; }
@@ -420,8 +428,8 @@
     <h1>R5 ModHub</h1>
     <span class="seg modesw" id="modeSw" title="Alleen Twitch, of Twitch samen met YouTube, TikTok en Instagram"><button data-mode="twitch">🟣 Twitch</button><button data-mode="multi">🌐 Multi</button></span>
     <button id="addZoneBtn" title="Zone toevoegen in dit tabblad">+ Zone</button>
-    <button id="tidyBtn" title="Alle blokken in dit tabblad automatisch netjes naast elkaar zetten">▦ Schikken</button>
     <div id="shortcutBar"></div>
+    <span id="layBtns"><button id="tidyBtn" title="Alle blokken in dit tabblad netjes naast en onder elkaar zetten, zonder gaten">▦ Netjes schikken</button><button id="layBtn" title="Blokken in dit tabblad aan- of uitzetten">✎ Indeling</button><button id="custBtn" title="Je eigen vaste indeling voor dit tabblad ontwerpen; ▦ Netjes schikken gaat daarna altijd terug naar deze indeling">▣ Eigen indeling</button></span>
     <button id="addScBtn" class="primary" title="Sneltoetsen bewerken of verwijderen">✎ Sneltoetsen</button>
     <button id="cloudInd" hidden title="Cloud-back-up (klik voor instellingen)"></button>
     <button id="bellBtn" title="Meldingen">🔔</button>
@@ -618,6 +626,21 @@
   </div>
 </div>
 
+<!-- Eigen indeling -->
+<div class="modal-bg" id="custModal">
+  <div class="modal wide">
+    <h2 id="custTitle">▣ Eigen indeling</h2>
+    <p class="hint" style="margin:0">Ontwerp hier de vaste indeling van dit tabblad. Sleep de vakken naar de plek die je wilt en maak ze met de hoek rechtsonder groter of kleiner. Blokken aan- of uitzetten doe je met <b>✎ Indeling</b>. Na <b>Opslaan</b> gaat <b>▦ Netjes schikken</b> in dit tabblad altijd terug naar deze indeling.</p>
+    <div class="cust-canvas" id="custCanvas"></div>
+    <div class="row">
+      <button id="custFromCur" title="De indeling die nu in het tabblad staat hierin overnemen">Huidige overnemen</button>
+      <button id="custStd" style="margin-right:auto" title="Eigen indeling wissen: ▦ Netjes schikken zet de blokken dan weer automatisch">Standaard</button>
+      <button data-close>Annuleren</button>
+      <button class="primary" id="custSave">Opslaan</button>
+    </div>
+  </div>
+</div>
+
 <!-- Hulp -->
 <div class="modal-bg" id="helpModal">
   <div class="modal" style="max-width:560px">
@@ -729,6 +752,7 @@
         <details class="cl-ver" open>
           <summary>Nieuw sinds 2.0.0</summary>
           <ul>
+            <li><b>Indeling</b>: rechtsboven staan nu <b>▦ Netjes schikken</b>, <b>✎ Indeling</b> (blokken aan of uit) en <b>▣ Eigen indeling</b>, net als in R5 StreamerHub. Met Eigen indeling ontwerp je per tabblad je vaste indeling; Netjes schikken gaat daarna altijd terug naar die indeling.</li>
             <li><b>Tabblad bewerken</b> (✎ op een tabblad): in Multi staan YouTube, TikTok en Instagram nu onder <b>Andere platforms</b>, waar je die blokken aan- of uitzet. Ze stonden er eerst als Twitch-kanaal met een vreemde code.</li>
           </ul>
         </details>
@@ -1557,10 +1581,110 @@
     };
     addEventListener('pointermove', move, true); addEventListener('pointerup', up, true); addEventListener('pointercancel', up, true);
   }
+  // Netjes schikken: terug naar de eigen indeling van het tabblad als die er is, anders automatisch.
+  // Blokken die niet in de eigen indeling staan krijgen de eerste vrije plek.
   function tidyTab() {
-    curTab().zones.forEach((z) => { delete z.x; delete z.y; delete z.z; });
+    const t = curTab(), c = t.custom, cw = $('#zones').clientWidth || 1400;
+    t.zones.forEach((z) => {
+      delete z.x; delete z.y; delete z.z;
+      const it = c && c[keyOf(z)];
+      if (it && !isMobile()) Object.assign(z, { x: Math.round(it.fx * cw), y: it.y, w: Math.round(it.fw * cw) - GRID, h: it.h });
+    });
     saveTabs(); renderZones();
   }
+
+  // ---------- eigen indeling ----------
+  // Klein voorbeeld van het tabblad: x en breedte als deel van de breedte (past zich aan het scherm aan), y en hoogte in px.
+  const CCOLS = 24;
+  let cust = null;
+  const custName = (z) => { const ze = zoneEls[keyOf(z)], n = ze && ze.root.querySelector('.zone-head .name'); return (!z.kind || z.kind === 'chat') ? '💬 Chat ' + z.channel : (n && n.textContent) || (z.kind === 'buttons' ? '⚡ Knoppen' : z.channel); };
+  function custFrom(src) {
+    const t = curTab(), cw = $('#zones').clientWidth || 1400, items = {};
+    t.zones.forEach((z) => {
+      const k = keyOf(z), c = src === 'custom' && t.custom && t.custom[k];
+      if (c) { items[k] = Object.assign({}, c); return; }
+      const ze = zoneEls[k];
+      if (!ze || z.x == null) return;
+      const el = ze.root;
+      items[k] = { fx: Math.max(0, z.x / cw), fw: Math.min(1, (el.offsetWidth + GRID) / cw), y: z.y, h: el.offsetHeight };
+    });
+    // blokken die nog geen plek hebben onderaan
+    let bottom = Object.values(items).reduce((m, r) => Math.max(m, r.y + r.h + GRID), 0);
+    t.zones.forEach((z) => { const k = keyOf(z); if (!items[k]) { items[k] = { fx: 0, fw: 1 / 3, y: bottom, h: 300 }; bottom += 300 + GRID; } });
+    return { items, names: Object.fromEntries(t.zones.map((z) => [keyOf(z), custName(z)])) };
+  }
+  function openCustom() {
+    if (isMobile()) return toast('Een eigen indeling maken kan op een groter scherm (computer of tablet in liggende stand).', 'err');
+    if (!curTab().zones.length) return toast('Dit tabblad heeft nog geen blokken. Voeg ze toe met + Zone.', 'err');
+    cust = custFrom(curTab().custom ? 'custom' : 'cur');
+    $('#custTitle').textContent = '▣ Eigen indeling: ' + curTab().name;
+    openModal('custModal');
+    drawCust();
+  }
+  function drawCust() {
+    const cv = $('#custCanvas'), cw = cv.clientWidth, sc = cw / ($('#zones').clientWidth || 1400);
+    cv.innerHTML = '';
+    let bottom = 0;
+    Object.entries(cust.items).forEach(([k, it]) => {
+      const b = document.createElement('div');
+      b.className = 'cbox'; b.dataset.k = k;
+      b.textContent = cust.names[k];
+      b.insertAdjacentHTML('beforeend', '<span class="crz"></span>');
+      b.style.left = it.fx * cw + 'px'; b.style.width = it.fw * cw - 4 + 'px';
+      b.style.top = it.y * sc + 'px'; b.style.height = Math.max(18, it.h * sc - 3) + 'px';
+      bottom = Math.max(bottom, (it.y + it.h) * sc);
+      cv.appendChild(b);
+      b.addEventListener('pointerdown', (e) => custPointer(e, b, k, e.target.classList.contains('crz')));
+    });
+    cv.style.height = Math.max(300, bottom + 60) + 'px';
+  }
+  // vakken mogen niet over elkaar: wat overlapt schuift naar beneden (zoals in het tabblad zelf)
+  function custResolve(fixed) {
+    const it = cust.items, hitC = (a, b) => a.fx < b.fx + b.fw - 1e-6 && a.fx + a.fw > b.fx + 1e-6 && a.y < b.y + b.h && a.y + a.h > b.y;
+    const done = fixed ? [fixed] : [];
+    Object.keys(it).filter((k) => k !== fixed).sort((a, b) => it[a].y - it[b].y || it[a].fx - it[b].fx).forEach((k) => {
+      let again = true;
+      while (again) { again = false; for (const o of done) if (hitC(it[k], it[o])) { it[k].y = it[o].y + it[o].h + GRID; again = true; } }
+      done.push(k);
+    });
+  }
+  function custPointer(e, b, k, resize) {
+    e.preventDefault(); e.stopPropagation();
+    const cv = $('#custCanvas'), cw = cv.clientWidth, sc = cw / ($('#zones').clientWidth || 1400), col = 1 / CCOLS;
+    const it = cust.items[k], sx = e.clientX, sy = e.clientY, o = Object.assign({}, it);
+    const orig = Object.fromEntries(Object.entries(cust.items).map(([q, v]) => [q, v.y]));
+    b.classList.add('moving');
+    const mv = (ev) => {
+      const dx = (ev.clientX - sx) / cw, dy = (ev.clientY - sy) / sc;
+      if (resize) {
+        it.fw = Math.min(1 - it.fx, Math.max(col * 3, Math.round((o.fw + dx) / col) * col));
+        it.h = Math.max(120, Math.round((o.h + dy) / GRID) * GRID);
+      } else {
+        it.fx = Math.min(1 - it.fw, Math.max(0, Math.round((o.fx + dx) / col) * col));
+        it.y = Math.max(0, Math.round((o.y + dy) / GRID) * GRID);
+      }
+      Object.entries(orig).forEach(([q, y]) => { if (q !== k) cust.items[q].y = y; });
+      custResolve(k);
+      cv.querySelectorAll('.cbox').forEach((el) => {
+        const r = cust.items[el.dataset.k];
+        el.style.left = r.fx * cw + 'px'; el.style.width = r.fw * cw - 4 + 'px'; el.style.top = r.y * sc + 'px'; el.style.height = Math.max(18, r.h * sc - 3) + 'px';
+      });
+    };
+    const up = () => { removeEventListener('pointermove', mv, true); removeEventListener('pointerup', up, true); removeEventListener('pointercancel', up, true); drawCust(); };
+    addEventListener('pointermove', mv, true); addEventListener('pointerup', up, true); addEventListener('pointercancel', up, true);
+  }
+  $('#custFromCur').onclick = () => { cust = custFrom('cur'); drawCust(); };
+  $('#custStd').onclick = () => {
+    delete curTab().custom;
+    closeModal('custModal'); tidyTab();
+    toast('Eigen indeling gewist. ▦ Netjes schikken zet de blokken weer automatisch.', 'ok');
+  };
+  $('#custSave').onclick = () => {
+    curTab().custom = cust.items;
+    closeModal('custModal'); tidyTab();
+    toast('Je eigen indeling is opgeslagen. ▦ Netjes schikken gaat in dit tabblad voortaan terug naar deze indeling.', 'ok');
+  };
+  addEventListener('resize', () => { if (cust && $('#custModal').classList.contains('open')) drawCust(); });
 
   // ---------- mobiele weergave ----------
   const mq = matchMedia('(max-width: 768px)');
@@ -4110,7 +4234,9 @@
   $('#zoneSave').onclick = () => { addZone($('#zoneName').value, $('#zoneKind').value); closeModal('zoneModal'); };
   $('#zoneName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#zoneSave').click(); });
   $('#viewBtn').onclick = () => openViewPicker();
-  $('#tidyBtn').onclick = () => { if (confirm('Alle blokken in dit tabblad automatisch netjes naast elkaar zetten?')) tidyTab(); };
+  $('#tidyBtn').onclick = () => { tidyTab(); toast(curTab().custom ? 'Terug naar je eigen indeling.' : 'Blokken netjes geschikt.'); };
+  $('#layBtn').onclick = () => openTabEdit(state.tab);
+  $('#custBtn').onclick = openCustom;
   $('#addScBtn').onclick = () => { renderShortcuts(); openModal('scListModal'); };
   $('#scNewBtn').onclick = () => { closeModal('scListModal'); backToList = true; openScModal(null); };
   $('#scType').onchange = updateScFields;
