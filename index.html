@@ -580,6 +580,10 @@
         <button id="exeCheck">Zoeken naar updates</button>
         <button class="primary" id="exeDownload" hidden>Downloaden</button>
       </div>
+      <div id="betaTvBox" hidden>
+        <label class="optrow"><input type="checkbox" id="betaTv"> 🧪 BETA: echte twitch.tv-speler in het streamblok</label>
+        <div class="hint">Telt mee voor kanaalpunten en je kijkreeks (de gewone ingesloten speler doet dat niet). Werkt het niet goed? Zet het vinkje uit, dan heb je de oude speler terug.</div>
+      </div>
     </div>
     <div class="row"><button data-close>Sluiten</button></div>
   </div>
@@ -719,10 +723,11 @@
       <summary><span class="hi">📜</span>Changelog<small>wat is er veranderd</small></summary>
       <div class="cl">
         <details class="cl-ver" open>
-          <summary>Nieuw sinds 1.8.0 <small>23 okt 2026</small></summary>
+          <summary>Versie 1.8.5 <small>24 okt 2026</small></summary>
           <ul>
             <li><b>Stream</b>: in de kop van het streamblok staat nu de huidige game naast de kanaalnaam.</li>
-            <li><b>+ Tabblad</b> en tabblad hernoemen: het invulvenster zit nu in R5 ModHub zelf. In de app liep het venster soms vast, vooral met een stream of de beloningswachtrij open.</li>
+            <li><b>🧪 BETA</b> (Windows-app): in ⚙ Instellingen &gt; Windows-app kun je de echte twitch.tv-speler aanzetten in het streamblok. Die telt mee voor kanaalpunten en je kijkreeks. Vinkje uit = weer de oude speler.</li>
+            <li><b>+ Tabblad</b> en tabblad hernoemen: het invulvenster zit nu in R5 ModHub zelf. In de app opende het soms op een ander scherm, waardoor de app leek vast te lopen.</li>
             <li><b>Modlog</b>: met 🗑 in de kop van het modlogblok maak je het log van dat kanaal leeg.</li>
             <li><b>Beloningsverzoeken</b> (app): de wachtrij gaat niet meer over de gebruikerskaart, het chatmenu of de meldingen heen.</li>
             <li><b>Kijkersgrafiek</b>: een gamewissel komt nu binnen een minuut in de grafiek (Twitch gaf de nieuwe game soms pas veel later door).</li>
@@ -2111,7 +2116,12 @@
     zone.timer = setInterval(() => { if (zone.root.isConnected) zone.poll(); }, 60000);
     zone.tickT = setInterval(tick, 1000);
     const host = location.hostname;
-    if (host && z.channel !== 'demo') {
+    if (tvBeta() && z.channel !== 'demo') {
+      // BETA (Windows-app): de echte speler van twitch.tv, door de app over dit vak gelegd (syncRewards)
+      zone.tvSlot = document.createElement('div');
+      zone.tvSlot.className = 'player-slot';
+      zone.root.appendChild(zone.tvSlot);
+    } else if (host && z.channel !== 'demo') {
       // De speler staat los in een eigen laag en volgt alleen de plek van het blok. Een iframe dat
       // in de pagina verplaatst wordt, laadt opnieuw; zo blijft de stream (en het geluid) doorlopen
       // als je van tabblad wisselt of blokken verschuift.
@@ -2148,6 +2158,8 @@
     return zone;
   }
 
+  // BETA-schakelaar in Instellingen > Windows-app (alleen in de app vanaf 1.8.5)
+  const tvBeta = () => !!(window.r5app && window.r5app.tvShow) && store.get('betaTv', false);
   const overlayOpen = () => !!document.querySelector('.modal-bg.open, #picker:not([hidden]), #card:not([hidden])');
   function resumePlayers() {
     if (document.hidden || overlayOpen()) return;
@@ -2197,8 +2209,9 @@
     // altijd bovenop, dus verbergen zolang zo'n venster over het blok valt
     const pops = [...document.querySelectorAll('#card:not([hidden]), #chatdd:not([hidden]), #bellDd:not([hidden])')].map((el) => el.getBoundingClientRect());
     Object.values(zoneEls).forEach((z) => {
-      if (!z.rqSlot) return;
-      const s = z.rqSlot;
+      const s = z.rqSlot || z.tvSlot;
+      if (!s) return;
+      const key = (z.tvSlot ? 'tv:' : '') + z.channel;
       let r = { x: 0, y: 0, w: 0, h: 0 };
       if (!modal && s.isConnected && s.offsetParent !== null && !(document.getElementById('zones').hidden && s.closest('#zones'))) {
         const b = s.getBoundingClientRect(), a = (s.closest('#zones') || s.closest('#mview') || document.body).getBoundingClientRect();
@@ -2206,11 +2219,14 @@
         if (x2 > x1 && y2 > y1 && !pops.some((p) => p.left < x2 && p.right > x1 && p.top < y2 && p.bottom > y1)) r = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
       }
       const k = [r.x, r.y, r.w, r.h].map(Math.round).join(',');
-      if (rqShown[z.channel] === k) return;
-      rqShown[z.channel] = k;
-      window.r5app.rewardsShow(z.channel, r);
+      if (rqShown[key] === k) return;
+      rqShown[key] = k;
+      if (z.tvSlot) window.r5app.tvShow(z.channel, r); else window.r5app.rewardsShow(z.channel, r);
     });
-    Object.keys(rqShown).forEach((ch) => { if (!zoneEls['rewards:' + ch]) { delete rqShown[ch]; window.r5app.rewardsClose(ch); } });
+    Object.keys(rqShown).forEach((key) => {
+      if (key.startsWith('tv:')) { const ch = key.slice(3); if (!zoneEls['stream:' + ch]) { delete rqShown[key]; window.r5app.tvClose(ch); } }
+      else if (!zoneEls['rewards:' + key]) { delete rqShown[key]; window.r5app.rewardsClose(key); }
+    });
     requestAnimationFrame(syncRewards);
   }
   if (window.r5app && window.r5app.rewardsShow) requestAnimationFrame(syncRewards);
@@ -4120,6 +4136,11 @@
   // Windows-app (.exe): zoeken naar updates. Alleen de .exe heeft window.r5app.
   if (window.r5app) {
     $('#exeBox').hidden = false;
+    if (window.r5app.tvShow) {
+      $('#betaTvBox').hidden = false;
+      $('#betaTv').checked = store.get('betaTv', false);
+      $('#betaTv').onchange = () => { store.set('betaTv', $('#betaTv').checked); location.reload(); };
+    }
     if (window.r5app.update) {
       // 1.7.5+: in-place update (zoeken, downloaden met voortgang, installeren en herstarten)
       let told = '';
