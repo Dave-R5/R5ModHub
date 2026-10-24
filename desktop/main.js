@@ -390,14 +390,20 @@ ipcMain.on('r5:open-poll', (e, ch) => {
 // BETA: de echte speler van twitch.tv in het streamblok, in plaats van de ingesloten speler.
 // Twitch telt kijken in een ingesloten speler niet mee voor kanaalpunten en kijkreeksen; op de
 // eigen kanaalpagina wel. De app laadt twitch.tv/<kanaal> als losse weergave over het blok en
-// laat met wat CSS alleen de video zien. Uit te zetten in Instellingen (dan weer de oude speler).
+// laat met wat CSS alleen de video zien (de speler over de hele weergave, chat en menu's weg). Uit te zetten in Instellingen (dan weer de oude speler).
 const tv = new Map(); // kanaal -> WebContentsView
 const TV_CSS = `
   html, body { overflow: hidden !important; background: #000 !important; }
   nav, .top-nav, [data-a-target="top-nav-container"] { display: none !important; }
-  .video-player, [data-a-target="video-player"] {
+  .persistent-player {
     position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important;
-    max-height: none !important; z-index: 2147483646 !important; background: #000 !important; }`;
+    max-width: none !important; max-height: none !important; transform: none !important;
+    z-index: 2147483646 !important; background: #000 !important; }
+  .persistent-player .video-player, .persistent-player [data-a-target="video-player"] {
+    width: 100% !important; height: 100% !important; max-height: none !important; }
+  .right-column, .channel-root__right-column, #sideNav, .side-nav { display: none !important; }
+  .persistent-player .video-player, .persistent-player .video-player__container, .persistent-player .video-ref {
+    height: 100vh !important; max-height: none !important; }`;
 const tvPage = (ch) => 'https://www.twitch.tv/' + ch;
 ipcMain.on('r5:tv-show', (e, ch, r) => {
   if (!fromSite(e) || !win || !okChan(ch) || !r) return;
