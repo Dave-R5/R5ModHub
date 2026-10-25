@@ -2,6 +2,51 @@
 <html lang="nl">
 <head>
 <meta charset="utf-8">
+<script>
+// Verhuizing: r5mod.daver5.nl blijft bestaan als bron achter modhub.r5mod.nl (Cloudflare, zie Dave-R5/r5mod-site),
+// maar wie het oude adres zelf opent, gaat door naar het nieuwe. De instellingen gaan mee in de link
+// (#r5verhuis=...), omdat de browser ze per adres bewaart; tokens en sleutels niet, daarvoor log je opnieuw in.
+// Windows-apps ouder dan 2.5.0 mogen niet naar een ander adres en blijven hier tot ze zijn bijgewerkt.
+(() => {
+  'use strict';
+  if (location.hostname !== 'r5mod.daver5.nl' || /access_token=/.test(location.hash)) return;
+  const PREFIX = 'modv.', SKIP = ['modv.token', 'modv.gistToken'];
+  const clean = (k, v) => {
+    // niets om op te schonen
+    return v;
+  };
+  const pack = () => {
+    const data = {};
+    try {
+      Object.keys(localStorage).forEach((k) => { if (k.startsWith(PREFIX) && !SKIP.includes(k)) { const v = clean(k, localStorage.getItem(k)); if (v != null) data[k] = v; } });
+    } catch { return ''; }
+    const enc = () => {
+      const b = new TextEncoder().encode(JSON.stringify(data));
+      let s = '';
+      for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+      return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    };
+    let out = enc();
+    // te lang voor een link: de grootste onderdelen (meestal geschiedenis) blijven achter
+    while (out.length > 1500000) {
+      const big = Object.keys(data).sort((a, b) => data[b].length - data[a].length)[0];
+      if (!big) return '';
+      delete data[big];
+      out = enc();
+    }
+    return Object.keys(data).length ? out : '';
+  };
+  const go = () => {
+    const p = pack();
+    location.replace('https://modhub.r5mod.nl' + location.pathname + location.search + (p ? '#r5verhuis=' + p : location.hash));
+  };
+  const app = window.r5app;
+  if (!app) return go();
+  if (typeof app.update !== 'function') return;
+  const newer = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+  app.update('state').then((u) => { if (u && u.currentVersion && !newer('2.5.0', u.currentVersion)) go(); }, () => {});
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#18181b">
@@ -955,7 +1000,7 @@
   const $ = (s) => document.querySelector(s);
 
   // ---------- verhuizing van het oude adres ----------
-  // r5mod.daver5.nl stuurt door naar dit adres en geeft de instellingen mee in de link (#r5verhuis=...),
+  // r5mod.daver5.nl stuurt door naar dit adres (zie het script in <head>) en geeft de instellingen mee in de link (#r5verhuis=...),
   // omdat de browser ze per adres bewaart. Alleen overnemen als dat oude adres de afzender is en hier nog niets staat.
   const verhuisd = (() => {
     const m = /^#r5verhuis=([\w-]+)$/.exec(location.hash);
