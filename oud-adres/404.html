@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="origin">
+<title>R5 ModHub is verhuisd</title>
+<style>
+  :root { color-scheme: dark; }
+  body { background: #0e0e10; color: #efeff1; font-family: system-ui, sans-serif; margin: 0; min-height: 100vh; display: grid; place-items: center; text-align: center; padding: 16px; box-sizing: border-box; }
+  a { color: #bf94ff; }
+  button { background: #9147ff; color: #fff; border: 0; border-radius: 6px; padding: 10px 18px; font-size: 15px; cursor: pointer; }
+  button[disabled] { opacity: .6; cursor: default; }
+</style>
+</head>
+<body>
+<main>
+  <h1>R5 ModHub is verhuisd</h1>
+  <p>Het nieuwe adres is <a id="go" href="https://modhub.r5mod.nl/">modhub.r5mod.nl</a>.</p>
+  <p id="msg">Je wordt doorgestuurd…</p>
+  <p><button id="upd" hidden>Nu bijwerken</button></p>
+</main>
+<script>
+// Dit is het oude adres (r5mod.daver5.nl). Bezoekers en OBS-bronnen gaan naar hetzelfde pad op het nieuwe adres.
+// Op de startpagina gaan je instellingen mee in de link (#r5verhuis=...), omdat de browser ze per adres
+// bewaart. Wachtwoorden en tokens gaan niet mee: daarvoor log je op het nieuwe adres opnieuw in.
+(() => {
+  'use strict';
+  const NEW = 'https://modhub.r5mod.nl', PREFIX = 'modv.', APP_MIN = '2.5.0';
+  const SKIP = ['modv.token', 'modv.gistToken'];
+  const clean = (k, v) => {
+    // niets om op te schonen
+    return v;
+  };
+  const $ = (id) => document.getElementById(id);
+  const newer = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+
+  const pack = () => {
+    const data = {};
+    try {
+      Object.keys(localStorage).forEach((k) => { if (k.startsWith(PREFIX) && !SKIP.includes(k)) { const v = clean(k, localStorage.getItem(k)); if (v != null) data[k] = v; } });
+    } catch { return ''; }
+    const enc = () => {
+      const b = new TextEncoder().encode(JSON.stringify(data));
+      let s = '';
+      for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+      return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    };
+    let out = enc();
+    // te lang voor een link: de grootste onderdelen (meestal geschiedenis) blijven achter
+    while (out.length > 1500000) {
+      const big = Object.keys(data).sort((a, b) => data[b].length - data[a].length)[0];
+      if (!big) return '';
+      delete data[big];
+      out = enc();
+    }
+    return Object.keys(data).length ? out : '';
+  };
+
+  const go = () => {
+    const home = location.pathname === '/' || location.pathname === '/index.html';
+    const p = home ? pack() : '';
+    location.replace(NEW + location.pathname + location.search + (p ? '#r5verhuis=' + p : location.hash));
+  };
+
+  const app = window.r5app;
+  if (!app) return go();
+  // In de Windows-app: alleen een nieuwe versie mag het nieuwe adres openen, oudere versies worden eerst bijgewerkt.
+  const needUpdate = (cur) => {
+    $('msg').textContent = 'Deze versie van de Windows-app (' + (cur || 'oud') + ') kan het nieuwe adres nog niet openen. Werk de app bij; daarna gaat alles vanzelf verder.';
+    const b = $('upd');
+    b.hidden = false;
+    if (typeof app.update !== 'function') { b.onclick = () => app.openDownload && app.openDownload(); return; }
+    const show = (u) => {
+      if (!u) return;
+      if (u.status === 'available') { b.disabled = false; b.textContent = 'Versie ' + u.version + ' downloaden'; b.onclick = () => app.update('download'); }
+      else if (u.status === 'downloading') { b.disabled = true; b.textContent = 'Downloaden… ' + (u.percent || 0) + '%'; }
+      else if (u.status === 'ready') { b.disabled = false; b.textContent = 'Herstarten en bijwerken'; b.onclick = () => app.update('install'); }
+      else if (u.status === 'checking') { b.disabled = true; b.textContent = 'Zoeken naar update…'; }
+      else { b.disabled = false; b.textContent = 'Opnieuw zoeken'; b.onclick = () => app.update('check').then(show); if (u.message) $('msg').textContent += ' (' + u.message + ')'; }
+    };
+    if (app.onUpdate) app.onUpdate(show);
+    app.update('check').then(show);
+  };
+  if (typeof app.update !== 'function') return needUpdate('');
+  app.update('state').then((u) => {
+    const cur = u && u.currentVersion;
+    if (cur && !newer(APP_MIN, cur)) go(); else needUpdate(cur);
+  }, () => needUpdate(''));
+})();
+</script>
+</body>
+</html>

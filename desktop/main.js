@@ -3,11 +3,18 @@
 const { app, BrowserWindow, WebContentsView, shell, Menu, ipcMain, session, dialog, net } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
+const fs = require('fs');
 const http = require('http');
 const crypto = require('crypto');
 
-const START_URL = 'https://r5mod.daver5.nl/';
-const inApp = (url) => url.startsWith(START_URL);
+const START_URL = 'https://modhub.r5mod.nl/';
+// Oud adres: stuurt door naar START_URL en geeft daarbij de instellingen mee (zie oud-adres/ in de repo).
+const OLD_URL = 'https://r5mod.daver5.nl/';
+const inApp = (url) => url.startsWith(START_URL) || url.startsWith(OLD_URL);
+// Na de verhuizing eerst het oude adres openen, zodat de instellingen van de app meeverhuizen.
+// Pas als het nieuwe adres bereikt is, wordt dat onthouden (zie did-navigate in createWindow).
+const movedMark = () => path.join(app.getPath('userData'), 'verhuisd-naar-r5mod.nl');
+const firstUrl = () => (fs.existsSync(movedMark()) ? START_URL : OLD_URL);
 
 // Updates: de app werkt zichzelf bij vanaf de openbare GitHub-releases (electron-updater),
 // op dezelfde manier als PointPlay: zoeken, downloaden met voortgang en daarna in-place
@@ -302,10 +309,14 @@ function createWindow() {
     if (!isMain || code === -3) return;
     win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(
       `<body style="background:#0e0e10;color:#efeff1;font-family:sans-serif;padding:40px">
-       <h2>Kan r5mod.daver5.nl niet laden</h2><p>${desc}. Controleer je internetverbinding.</p>
+       <h2>Kan ${new URL(url || START_URL).host} niet laden</h2><p>${desc}. Controleer je internetverbinding.</p>
        <button onclick="location.href='${START_URL}'">Opnieuw proberen</button></body>`));
   });
-  win.loadURL(START_URL);
+  win.webContents.on('did-navigate', (_e, url, code) => {
+    if (url.startsWith(START_URL)) { if (!fs.existsSync(movedMark())) try { fs.writeFileSync(movedMark(), new Date().toISOString()); } catch {} }
+    else if (url.startsWith(OLD_URL) && code >= 400) win.loadURL(START_URL);
+  });
+  win.loadURL(firstUrl());
 }
 
 Menu.setApplicationMenu(Menu.buildFromTemplate([

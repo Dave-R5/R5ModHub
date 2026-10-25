@@ -1,8 +1,8 @@
 {
   "name": "modweergave",
   "productName": "R5 ModHub",
-  "version": "2.0.0",
-  "description": "R5 ModHub, modtool voor Twitch, als Windows-app (laadt r5mod.daver5.nl)",
+  "version": "2.5.0",
+  "description": "R5 ModHub, modtool voor Twitch, als Windows-app (laadt modhub.r5mod.nl)",
   "main": "main.js",
   "author": "Dave",
   "license": "UNLICENSED",
