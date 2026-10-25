@@ -2,6 +2,51 @@
 <html lang="nl">
 <head>
 <meta charset="utf-8">
+<script>
+// Verhuizing: r5mod.daver5.nl blijft bestaan als bron achter modhub.r5mod.nl (Cloudflare, zie Dave-R5/r5mod-site),
+// maar wie het oude adres zelf opent, gaat door naar het nieuwe. De instellingen gaan mee in de link
+// (#r5verhuis=...), omdat de browser ze per adres bewaart; tokens en sleutels niet, daarvoor log je opnieuw in.
+// Windows-apps ouder dan 2.5.0 mogen niet naar een ander adres en blijven hier tot ze zijn bijgewerkt.
+(() => {
+  'use strict';
+  if (location.hostname !== 'r5mod.daver5.nl' || /access_token=/.test(location.hash)) return;
+  const PREFIX = 'modv.', SKIP = ['modv.token', 'modv.gistToken'];
+  const clean = (k, v) => {
+    // niets om op te schonen
+    return v;
+  };
+  const pack = () => {
+    const data = {};
+    try {
+      Object.keys(localStorage).forEach((k) => { if (k.startsWith(PREFIX) && !SKIP.includes(k)) { const v = clean(k, localStorage.getItem(k)); if (v != null) data[k] = v; } });
+    } catch { return ''; }
+    const enc = () => {
+      const b = new TextEncoder().encode(JSON.stringify(data));
+      let s = '';
+      for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+      return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    };
+    let out = enc();
+    // te lang voor een link: de grootste onderdelen (meestal geschiedenis) blijven achter
+    while (out.length > 1500000) {
+      const big = Object.keys(data).sort((a, b) => data[b].length - data[a].length)[0];
+      if (!big) return '';
+      delete data[big];
+      out = enc();
+    }
+    return Object.keys(data).length ? out : '';
+  };
+  const go = () => {
+    const p = pack();
+    location.replace('https://modhub.r5mod.nl' + location.pathname + location.search + (p ? '#r5verhuis=' + p : location.hash));
+  };
+  const app = window.r5app;
+  if (!app) return go();
+  if (typeof app.update !== 'function') return;
+  const newer = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+  app.update('state').then((u) => { if (u && u.currentVersion && !newer('2.5.0', u.currentVersion)) go(); }, () => {});
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#18181b">
@@ -657,7 +702,7 @@
     <details class="help-sec">
       <summary><span class="hi">🖥</span>De app<small>web-app, Windows en updates</small></summary>
       <ul>
-        <li>Drie manieren: <b>in de browser</b> op r5mod.daver5.nl, als <b>web-app</b> of als <b>Windows-app</b>. Overal dezelfde functies.</li>
+        <li>Drie manieren: <b>in de browser</b> op modhub.r5mod.nl, als <b>web-app</b> of als <b>Windows-app</b>. Overal dezelfde functies.</li>
         <li><b>Web-app</b>: ⚙ → <b>Installeer Web-App</b>, of in Chrome/Edge het installeer-icoon in de adresbalk. Op iPhone/iPad: Safari → Delen → Zet op beginscherm. Je krijgt een eigen venster en snelkoppeling, zonder browserbalk.</li>
         <li><b>Windows-app</b>: ⚙ → <b>Installeer App</b> downloadt de nieuwste versie (.exe). Alle versies staan op <a href="https://github.com/Dave-R5/R5ModHub/releases" target="_blank" rel="noopener">GitHub-releases</a>.</li>
         <li><b>Inloggen in de Windows-app</b> gaat in een klein venster van de app zelf. De eerste keer log je ook bij twitch.tv in, zodat de speler je Turbo of abonnement herkent (geen reclame).</li>
@@ -750,8 +795,9 @@
       <summary><span class="hi">📜</span>Changelog<small>wat is er veranderd</small></summary>
       <div class="cl">
         <details class="cl-ver" open>
-          <summary>Nieuw sinds 2.0.0</summary>
+          <summary>Versie 2.5.0</summary>
           <ul>
+            <li><b>Nieuw adres: modhub.r5mod.nl</b>. Het oude adres r5mod.daver5.nl stuurt je door en neemt je instellingen mee; log daarna één keer opnieuw in met Twitch. Gebruik je de web-app, installeer die dan opnieuw vanaf het nieuwe adres. De Windows-app werkt zichzelf bij naar 2.5.0 en gaat dan vanzelf naar het nieuwe adres.</li>
             <li><b>Indeling</b>: rechtsboven staan nu <b>▦ Netjes schikken</b>, <b>✎ Indeling</b> (blokken aan of uit) en <b>▣ Eigen indeling</b>, net als in R5 StreamerHub. Met Eigen indeling ontwerp je per tabblad je vaste indeling; Netjes schikken gaat daarna altijd terug naar die indeling.</li>
             <li><b>Tabblad bewerken</b> (✎ op een tabblad): in Multi staan YouTube, TikTok en Instagram nu onder <b>Andere platforms</b>, waar je die blokken aan- of uitzet. Ze stonden er eerst als Twitch-kanaal met een vreemde code.</li>
           </ul>
@@ -953,6 +999,23 @@
   const USER_TYPES = ['timeout', 'ban', 'unban', 'delete'];
   const $ = (s) => document.querySelector(s);
 
+  // ---------- verhuizing van het oude adres ----------
+  // r5mod.daver5.nl stuurt door naar dit adres (zie het script in <head>) en geeft de instellingen mee in de link (#r5verhuis=...),
+  // omdat de browser ze per adres bewaart. Alleen overnemen als dat oude adres de afzender is en hier nog niets staat.
+  const verhuisd = (() => {
+    const m = /^#r5verhuis=([\w-]+)$/.exec(location.hash);
+    if (!m) return false;
+    history.replaceState(null, '', location.pathname + location.search);
+    try {
+      if (!/^https:\/\/r5mod\.daver5\.nl\//.test(document.referrer)) return false;
+      if (Object.keys(localStorage).some((k) => k.startsWith('modv.'))) return false;
+      const b = atob(m[1].replace(/-/g, '+').replace(/_/g, '/'));
+      const data = JSON.parse(new TextDecoder().decode(Uint8Array.from(b, (c) => c.charCodeAt(0))));
+      Object.entries(data).forEach(([k, v]) => { if (k.startsWith('modv.') && typeof v === 'string') localStorage.setItem(k, v); });
+      return true;
+    } catch { return false; }
+  })();
+
   // ---------- opslag ----------
   const store = {
     get(k, d) { try { const v = localStorage.getItem('modv.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -1050,7 +1113,7 @@
 
   function login() {
     const id = DEFAULT_CLIENT_ID;
-    if (location.protocol === 'file:') return toast('Inloggen werkt alleen als de pagina via http(s) draait (bijv. localhost of online). Open de pagina via r5mod.daver5.nl.', 'err');
+    if (location.protocol === 'file:') return toast('Inloggen werkt alleen als de pagina via http(s) draait (bijv. localhost of online). Open de pagina via modhub.r5mod.nl.', 'err');
     const u = new URL('https://id.twitch.tv/oauth2/authorize');
     u.search = new URLSearchParams({ client_id: id, redirect_uri: redirectUri, response_type: 'token', scope: SCOPES.join(' '), force_verify: 'true' });
     location.href = u.toString();
@@ -4427,6 +4490,7 @@
   // ---------- start ----------
 
   readTokenFromHash();
+  if (verhuisd) toast('Welkom op het nieuwe adres ' + location.host + '. Je instellingen zijn meegekomen; log opnieuw in met Twitch.');
   renderShortcuts();
   renderTabs();
   renderZones();
