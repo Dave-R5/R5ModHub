@@ -108,7 +108,11 @@
   body.resizing #zones.free .canvas > .zone.moving, #zones.free.settling .canvas > .zone { transition: none; }
   #zones.free .zone.moving { box-shadow: 0 10px 30px rgba(0,0,0,.6); opacity: .92; }
   .snapline { position: absolute; background: var(--accent); pointer-events: none; z-index: 9999; }
-  #layBtns { display: flex; gap: 6px; } #layBtns button { white-space: nowrap; }
+  .laybtn { margin-left: auto; align-self: center; white-space: nowrap; margin-bottom: 4px; position: sticky; right: 0; }
+  .laybtn.on { border-color: var(--accent); }
+  #layDd { position: fixed; z-index: 16; width: 300px; max-width: calc(100vw - 16px); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.5); padding: 6px 0; }
+  #layDd[hidden] { display: none; }
   .modal.wide { max-width: 1100px; }
   .cust-canvas { position: relative; margin-top: 12px; background: var(--bg); border: 1px dashed var(--line); border-radius: 8px; min-height: 300px;
     background-image: linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px); background-size: calc(100% / 24) 100%; touch-action: none; }
@@ -360,7 +364,7 @@
   @media (max-width: 768px) {
     header h1 { display: none; }
     #cloudInd { font-size: 0; } #cloudInd::before { content: '☁'; font-size: 16px; }
-    #layBtns { display: none; }
+    .laybtn { display: none; }
     #viewBtn, #modlogBtn { font-size: 0; } #viewBtn::before { content: '▣'; font-size: 16px; } #modlogBtn::before { content: '📋'; font-size: 16px; }
     header { gap: 6px; }
     #selInfo { order: 10; flex-basis: 100%; max-width: none; }
@@ -491,7 +495,6 @@
     <span class="seg modesw" id="modeSw" title="Alleen Twitch, of Twitch samen met YouTube, TikTok en Instagram"><button data-mode="twitch">🟣 Twitch</button><button data-mode="multi">🌐 Multi</button></span>
     <button id="addZoneBtn" title="Zone toevoegen in dit tabblad">+ Zone</button>
     <button id="scDdBtn" class="primary" title="Je sneltoetsen (klik een knop om hem uit te voeren, rechtsklik om te bewerken)">⚡ Sneltoetsen ▾</button>
-    <span id="layBtns"><button id="tidyBtn" title="Alle blokken in dit tabblad netjes naast en onder elkaar zetten, zonder gaten">▦ Netjes schikken</button><button id="layBtn" title="Blokken in dit tabblad aan- of uitzetten">✎ Indeling</button><button id="custBtn" title="Je eigen vaste indeling voor dit tabblad ontwerpen; ▦ Netjes schikken gaat daarna altijd terug naar deze indeling">▣ Eigen indeling</button></span>
     <button id="cloudInd" hidden title="Cloud-back-up (klik voor instellingen)"></button>
     <button id="bellBtn" title="Meldingen">🔔</button>
     <button id="helpBtn" title="Hulp: wat kan R5 ModHub allemaal?">❓</button>
@@ -834,6 +837,7 @@
           <summary>Nieuw sinds 4.0.0 <small>26 okt 2026</small></summary>
           <ul>
             <li><b>☁ Cloud-sync via je Twitch-account</b>: tabbladen, indeling, sneltoetsen, instellingen, notities, woordfilter, modlog en kijkersgrafiek zijn op elke pc en in elke browser hetzelfde zodra je inlogt. Geen GitHub-token meer nodig; staat standaard aan en kun je uitzetten in ⚙ Instellingen. Je inlog gaat nooit mee, en modlog en grafiek ouder dan 90 dagen worden opgeschoond.</li>
+            <li><b>🎨 Personaliseer</b> rechts in de tabbladbalk: ▦ Netjes schikken, ✎ Indeling en ▣ Eigen indeling zitten nu samen in één uitklapmenu, zodat de bovenbalk rustiger is.</li>
             <li><b>⚡ Sneltoetsen</b> staan niet meer los in de bovenbalk maar in één knop: klik erop en je ziet al je sneltoetsen in een uitklapmenu, met onderaan ✎ Sneltoetsen bewerken. De toetscombinaties werken gewoon zoals altijd.</li>
             <li><b>Verplichte update</b> in de Windows-app: staat er bij het opstarten een nieuwe versie klaar, dan wordt die eerst gedownload en geïnstalleerd voordat je verder kunt.</li>
           </ul>
@@ -1048,6 +1052,7 @@
 <div id="card" hidden></div>
 <div id="chatdd" hidden></div>
 <div id="bellDd" hidden></div>
+<div id="layDd" hidden><button class="bn" id="tidyBtn">▦ Netjes schikken<small>Alle blokken in dit tabblad netjes naast en onder elkaar, zonder gaten (of terug naar je eigen indeling)</small></button><button class="bn" id="layBtn">✎ Indeling<small>Blokken in dit tabblad aan- of uitzetten</small></button><button class="bn" id="custBtn">▣ Eigen indeling<small>Je eigen vaste indeling voor dit tabblad ontwerpen</small></button></div>
 <div id="scDd" hidden><div id="shortcutBar"></div><button id="addScBtn" class="dd-link" title="Sneltoetsen toevoegen, bewerken of verwijderen">✎ Sneltoetsen bewerken</button></div>
 <div id="picker" hidden></div>
 <div id="toasts"></div>
@@ -1411,7 +1416,24 @@
     add.className = 'icon tadd'; add.textContent = '+ Tabblad'; add.title = 'Tabblad toevoegen';
     add.onclick = addTab;
     nav.appendChild(add);
+    const lay = document.createElement('button');
+    lay.className = 'laybtn' + ($('#layDd').hidden ? '' : ' on'); lay.id = 'layDdBtn'; lay.textContent = '🎨 Personaliseer ▾';
+    lay.title = 'Indeling van dit tabblad: netjes schikken, blokken aan/uit of je eigen indeling';
+    lay.onclick = () => {
+      const dd = $('#layDd');
+      if (!dd.hidden) return closeLayDd();
+      dd.hidden = false; lay.classList.add('on');
+      const r = lay.getBoundingClientRect(), w = dd.offsetWidth;
+      dd.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + 'px';
+      dd.style.top = (r.bottom + 4) + 'px';
+    };
+    nav.appendChild(lay);
   }
+  function closeLayDd() { $('#layDd').hidden = true; const b = $('#layDdBtn'); if (b) b.classList.remove('on'); }
+  $('#layDd').addEventListener('click', (e) => { if (e.target.closest('.bn')) closeLayDd(); });
+  document.addEventListener('mousedown', (e) => {
+    if (!$('#layDd').hidden && !e.target.closest('#layDd') && !e.target.closest('#layDdBtn')) closeLayDd();
+  });
 
   // ✎ op een tabblad: naam en per blok een schakelaar
   const TE_KINDS = [['stream', '📺 Stream'], ['chat', '💬 Chat'], ['users', '👥 Kijkers'], ['graph', '📈 Kijkersgrafiek'], ['modlog', '📋 Modlog'], ['rewards', '🎁 Beloningsverzoeken'], ['songs', '🎵 Verzoekjes'], ['twchat', '🟣 Twitch-chat (origineel)']];
@@ -2542,7 +2564,7 @@
     const modal = rqDrag || !!document.fullscreenElement || !!document.querySelector('.modal-bg.open, #picker:not([hidden])');
     // gebruikerskaart, chatmenu en meldingen liggen in de site; de wachtrij van de app ligt daar
     // altijd bovenop, dus verbergen zolang zo'n venster over het blok valt
-    const pops = [...document.querySelectorAll('#card:not([hidden]), #chatdd:not([hidden]), #bellDd:not([hidden]), #scDd:not([hidden])')].map((el) => el.getBoundingClientRect());
+    const pops = [...document.querySelectorAll('#card:not([hidden]), #chatdd:not([hidden]), #bellDd:not([hidden]), #scDd:not([hidden]), #layDd:not([hidden])')].map((el) => el.getBoundingClientRect());
     Object.values(zoneEls).forEach((z) => {
       if (z.webSlot) return syncWeb(z, modal, pops);
       const s = z.rqSlot || z.tvSlot;
@@ -4320,6 +4342,7 @@
     if (e.key === 'Escape') {
       if (!$('#chatdd').hidden) closeChatDd();
       else if (!$('#scDd').hidden) closeScDd();
+      else if (!$('#layDd').hidden) closeLayDd();
       else if (!$('#picker').hidden) $('#picker').hidden = true;
       else if (!$('#card').hidden) closeCard(); else clearSel();
       return;
