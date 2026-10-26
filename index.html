@@ -311,8 +311,10 @@
   .mychans .mc-sec { flex-basis: 100%; font-size: 11px; color: var(--muted); text-transform: uppercase; margin-top: 6px; }
   .mychan.fol { border-color: #6b4fbb; }
   .mychan.fol .mc-state { color: #b79cff; }
-  .mychan.fol { padding-right: 28px; }
-  .mychan .mc-fav { position: absolute; top: 3px; right: 5px; font-size: 14px; color: var(--muted); padding: 2px 4px; }
+  .mychan.fol { padding-right: 46px; }
+  .mychan .mc-fav { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); font-size: 24px; line-height: 1; color: var(--muted);
+    padding: 6px; border-radius: 6px; }
+  .mychan .mc-fav:hover { background: #ffffff14; color: #ffcc33; }
   .mychan .mc-fav.on { color: #ffcc33; }
   .mychan.fol.fav { border-color: #ffcc33; }
   body.resizing iframe { pointer-events: none; }
@@ -802,6 +804,12 @@
       <summary><span class="hi">📜</span>Changelog<small>wat is er veranderd</small></summary>
       <div class="cl">
         <details class="cl-ver" open>
+          <summary>Nieuw sinds 3.0.0 <small>26 okt 2026</small></summary>
+          <ul>
+            <li>De ☆-knop voor favorieten bij <b>🟣 Online gevolgd</b> is groter en makkelijker aan te tikken.</li>
+          </ul>
+        </details>
+        <details class="cl-ver">
           <summary>Versie 3.0.0 <small>26 okt 2026</small></summary>
           <ul>
             <li>Bij <b>🟣 Online gevolgd</b> maak je een kanaal favoriet met ☆; favorieten staan altijd bovenaan.</li>
