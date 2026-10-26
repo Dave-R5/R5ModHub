@@ -4613,7 +4613,7 @@
       body: body ? JSON.stringify(body) : undefined,
     });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(r.status === 401 ? 'log opnieuw in met Twitch' : r.status === 413 ? 'te veel gegevens voor de cloud' : j.error || 'fout ' + r.status);
+    if (!r.ok) throw new Error(r.status === 401 ? 'r5mod.nl accepteert je Twitch-login niet (' + (j.reason || 'onbekend') + (j.client_id ? ', ' + j.client_id : '') + ')' : r.status === 413 ? 'te veel gegevens voor de cloud' : j.error || 'fout ' + r.status);
     return j;
   }
   function renderSync(st) {
