@@ -183,6 +183,7 @@
   .bn.unread { border-left: 3px solid var(--accent); }
   #cloudInd { font-size: 12px; white-space: nowrap; background: transparent; border-color: transparent; color: var(--ok); }
   #cloudInd.wait { color: var(--muted); } #cloudInd.err { color: #ff6b6b; }
+  #cloudInd.sync { font-size: 16px; padding: 4px 6px; }
   .tab.drop-before { box-shadow: inset 3px 0 0 var(--accent); }
   .tab.drop-after { box-shadow: inset -3px 0 0 var(--accent); }
   .zone-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--line);
@@ -4617,7 +4618,7 @@
     return j;
   }
   function renderSync(st) {
-    if (st) twSync.st = st;
+    if (st != null) twSync.st = st;
     const at = +(localStorage.getItem('r5sync.at') || 0);
     $('#syncOn').checked = !syncOff();
     $('#syncNow').disabled = $('#syncWipe').disabled = !syncActive();
@@ -4627,17 +4628,20 @@
     if (!store.get('gistToken', '')) {
       const b = $('#cloudInd');
       b.hidden = !syncActive();
-      b.className = { err: 'err', wait: 'wait', busy: 'wait' }[twSync.st] || '';
-      b.textContent = { wait: '☁ Wijziging wacht', busy: '☁ Bezig…', err: '☁ Niet gelukt' }[twSync.st] || '☁ Gesynchroniseerd';
-      b.title = 'Cloud-sync via je Twitch-account (klik voor instellingen)';
+      // alleen een wolkje (kleur = status), zodat de bovenbalk niet voller wordt; de uitleg staat in de tooltip
+      b.className = 'sync ' + ({ err: 'err', wait: 'wait', busy: 'wait' }[twSync.st] || '');
+      b.textContent = '☁';
+      b.title = ({ wait: 'Wijziging wacht', busy: 'Bezig met synchroniseren…', err: 'Synchroniseren niet gelukt' }[twSync.st] || 'Gesynchroniseerd') + ' (cloud-sync via je Twitch-account, klik voor instellingen)';
     }
   }
   function syncTouch(k) {
     if (twSync.applying || !twSync.ready) return;   // opslaan tijdens het opstarten is geen wijziging van jou
     twSync.dirty.add(k);
     if (!syncActive()) return;
+    // grafiek e.d. veranderen elke minuut: die gaan mee met de volgende ronde, zonder de wachttijd steeds opnieuw te starten
+    if (SYNC_SLOW[k]) { if (!twSync.t) twSync.t = setTimeout(() => { twSync.t = null; syncPush().catch(() => {}); }, 60000); return; }
     clearTimeout(twSync.t);
-    twSync.t = setTimeout(() => syncPush().catch(() => {}), 30000);
+    twSync.t = setTimeout(() => { twSync.t = null; syncPush().catch(() => {}); }, 30000);
     renderSync('wait');
   }
   // alles wat gewijzigd is naar de cloud; bij een botsing samenvoegen en nog eens
@@ -4646,7 +4650,7 @@
     const vers = syncVers();
     if (!vers || vers.user !== state.me.user_id) return;   // eerst ophalen (syncPull)
     const now = Date.now(), keys = [...twSync.dirty].filter((k) => all || !SYNC_SLOW[k] || now - (twSync.at[k] || 0) > SYNC_SLOW[k]);
-    if (!keys.length) { if (twSync.dirty.size) { clearTimeout(twSync.t); twSync.t = setTimeout(() => syncPush().catch(() => {}), 60000); } return renderSync(''); }
+    if (!keys.length) { if (twSync.dirty.size && !twSync.t) twSync.t = setTimeout(() => { twSync.t = null; syncPush().catch(() => {}); }, 60000); return renderSync(twSync.st === 'err' ? 'err' : ''); }
     twSync.busy = true; renderSync('busy');
     try {
       // iets dat hier en in de cloud nooit bestond, hoeft niet mee
@@ -4666,7 +4670,8 @@
       }
       setSyncVers(vers);
       localStorage.setItem('r5sync.at', String(Date.now()));
-      twSync.busy = false; renderSync(twSync.dirty.size ? 'wait' : 'ok');
+      twSync.busy = false; renderSync([...twSync.dirty].some((k) => !SYNC_SLOW[k]) ? 'wait' : 'ok');
+      if (twSync.dirty.size && !twSync.t) twSync.t = setTimeout(() => { twSync.t = null; syncPush().catch(() => {}); }, 60000);
     } catch (e) {
       keys.forEach((k) => twSync.dirty.add(k));
       twSync.busy = false; twSync.err = e.message; renderSync('err');
