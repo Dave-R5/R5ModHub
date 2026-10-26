@@ -1,7 +1,7 @@
 {
   "name": "modweergave",
   "productName": "R5 ModHub",
-  "version": "3.5.0",
+  "version": "4.0.0",
   "description": "R5 ModHub, modtool voor Twitch, als Windows-app (laadt modhub.r5mod.nl)",
   "main": "main.js",
   "author": "Dave",
@@ -30,6 +30,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
+      "menuCategory": "R5Mod",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "R5 ModHub"
