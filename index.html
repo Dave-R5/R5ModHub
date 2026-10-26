@@ -308,6 +308,9 @@
   .mychan .mc-x { position: absolute; top: 4px; right: 6px; font-size: 12px; color: var(--muted); padding: 2px 4px; }
   .mychan .mc-x:hover { color: var(--danger); }
   .mychan.add { border-style: dashed; color: var(--muted); }
+  .mychans .mc-sec { flex-basis: 100%; font-size: 11px; color: var(--muted); text-transform: uppercase; margin-top: 6px; }
+  .mychan.fol { border-color: #6b4fbb; }
+  .mychan.fol .mc-state { color: #b79cff; }
   body.resizing iframe { pointer-events: none; }
   body.resizing { user-select: none; }
   .howto { margin-top: 8px; font-size: 13px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
@@ -797,6 +800,7 @@
         <details class="cl-ver" open>
           <summary>Nieuw sinds 2.5.0 <small>26 okt 2026</small></summary>
           <ul>
+            <li>Hoofd toont onder je mod-kanalen nu ook <b>🟣 Online gevolgd</b>: kanalen die je volgt en die nu live zijn. Een kanaal waar je geen mod bent opent met stream, chat en actieknoppen. Log één keer opnieuw in via ⚙ om dit aan te zetten.</li>
             <li>Overal in de app (hulp, changelog en links) staat nu alleen nog het adres <b>modhub.r5mod.nl</b>; verwijzingen naar het oude adres zijn weggehaald.</li>
             <li>Vragen en suggesties via ❓ komen nu op één centraal adres binnen. Het voorbeeld bij Naam is weggehaald.</li>
           </ul>
@@ -997,7 +1001,7 @@
   'use strict';
   const SCOPES = ['chat:read', 'chat:edit', 'moderator:manage:banned_users', 'moderator:manage:chat_messages', 'user:read:emotes', 'moderator:read:chatters', 'user:read:moderated_channels', 'moderation:read', 'channel:read:vips', 'moderator:manage:shield_mode', 'moderator:manage:chat_settings',
     'moderator:read:blocked_terms', 'moderator:read:unban_requests', 'moderator:read:warnings', 'moderator:read:moderators', 'moderator:read:vips',
-    'channel:read:polls', 'channel:read:redemptions', 'moderator:manage:announcements', 'moderator:manage:shoutouts', 'moderator:manage:warnings', 'channel:manage:polls'];
+    'channel:read:polls', 'channel:read:redemptions', 'moderator:manage:announcements', 'moderator:manage:shoutouts', 'moderator:manage:warnings', 'channel:manage:polls', 'user:read:follows'];
   const MAX_MSGS = 300;
   // Client ID van de gedeelde Twitch-app van deze site: hiermee kan iedereen direct inloggen.
   // Een Client ID is openbaar (geen wachtwoord), dus hij mag in de code staan.
@@ -2953,6 +2957,7 @@
         all.unshift({ broadcaster_id: state.me.user_id, broadcaster_login: state.me.login, broadcaster_name: state.me.login });
       myChans.list = all; myChans.err = '';
       await loadMyChansLive();
+      await loadFollowedLive();
       esubSync();
     } catch (e) { myChans.err = e.message; }
     if (state.tab === mainTabId()) renderZones();
@@ -2983,7 +2988,29 @@
     myChans.checked = true;
     myChans.live = live;
   }
-  setInterval(async () => { if (myChans.list) { await loadMyChansLive(); if (state.tab === mainTabId()) renderZones(); } }, 2 * 60 * 1000);
+  setInterval(async () => { if (myChans.list) { await loadMyChansLive(); await loadFollowedLive(); if (state.tab === mainTabId()) renderZones(); } }, 2 * 60 * 1000);
+
+  // gevolgde kanalen die nu live zijn (Helix streams/followed, scope user:read:follows)
+  const followed = { list: null, err: '' };
+  async function loadFollowedLive() {
+    if (!state.me) return;
+    if (!(state.me.scopes || []).includes('user:read:follows')) { followed.list = null; followed.err = 'scope'; return; }
+    try {
+      const all = [];
+      let cursor = '';
+      for (let i = 0; i < 5; i++) {
+        const params = { user_id: state.me.user_id, first: 100 };
+        if (cursor) params.after = cursor;
+        const j = await helix('GET', 'streams/followed', params);
+        all.push(...j.data);
+        cursor = j.pagination && j.pagination.cursor;
+        if (!cursor) break;
+      }
+      followed.list = all; followed.err = '';
+    } catch (e) { followed.err = e.message; }
+  }
+  // kanaal waar je geen mod bent (vip of gewone kijker): dan krijg je geen modtools
+  const isModOf = (login) => login === 'demo' || (state.me && login === state.me.login) || (myChans.list || []).some((c) => c.broadcaster_login === login);
 
   function myChansEl() {
     const box = document.createElement('div');
@@ -3010,6 +3037,23 @@
     add.innerHTML = '<span class="mc-name">+ Streamer</span><span class="mc-state">waar je geen mod bent</span>';
     add.onclick = addExtraChan;
     box.appendChild(add);
+    if (state.me) {
+      box.insertAdjacentHTML('beforeend', '<div class="mc-sec">🟣 Online gevolgd</div>');
+      const shown = new Set([...(myChans.list || []).map((c) => c.broadcaster_login), ...extraChans]);
+      const fl = (followed.list || []).filter((st) => !shown.has(st.user_login)).sort((a, b) => b.viewer_count - a.viewer_count);
+      if (followed.err === 'scope') hint('Log opnieuw in via ⚙ om hier je gevolgde kanalen te zien die nu live zijn.');
+      else if (followed.err) hint('Gevolgde kanalen laden mislukt: ' + esc(followed.err));
+      else if (!followed.list) hint('Gevolgde kanalen worden geladen…');
+      else if (!fl.length) hint('Geen gevolgde kanalen live (waar je geen mod bent).');
+      else fl.forEach((st) => {
+        const b = document.createElement('button');
+        b.className = 'mychan fol';
+        b.title = (st.game_name || '') + ' · ' + (st.title || '') + '\n(geen mod: opent stream, chat en actieknoppen)';
+        b.innerHTML = '<span class="mc-name">' + esc(st.user_name) + '</span><span class="mc-state">● ' + st.viewer_count + ' kijkers' + (st.game_name ? ' · ' + esc(st.game_name) : '') + '</span>';
+        b.onclick = () => openChannelTab(st.user_login, st.user_name);
+        box.appendChild(b);
+      });
+    }
     return box;
   }
 
@@ -3031,10 +3075,13 @@
   function openChannelTab(login, name) {
     let t = state.tabs.find((x) => x.channel === login);
     if (!t) {
+      // geen mod (vip of kijker): standaard alleen stream + chat + actieknoppen, geen kijkerslijst/modlog/grafiek
+      const mod = isModOf(login);
       t = { id: 't' + Date.now().toString(36), name: name || login, channel: login, zones: [] };
+      if (!mod) t.extras = true;
       state.tabs.push(t); saveTabs();
       switchTab(t.id);
-      addZone(login, 'all');
+      addZone(login, mod ? 'all' : 'both');
     } else switchTab(t.id);
   }
 
