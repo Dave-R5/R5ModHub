@@ -430,10 +430,17 @@ ipcMain.on('r5:tv-show', (e, ch, r) => {
     v.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
     // alleen de kanaalpagina zelf; klikken naar andere pagina's gaan naar de gewone browser
     const own = (url) => url.split(/[?#]/)[0].replace(/\/$/, '').toLowerCase() === tvPage(ch);
-    v.webContents.on('will-navigate', (ev, url) => { if (!own(url)) { ev.preventDefault(); shell.openExternal(url); } });
+    // bij een raid gaat twitch.tv zelf naar het kanaal dat geraid wordt; dat doet de hub al
+    // (Meegaan / na 10 s), dus dan niet ook de browser openen, alleen terug naar dit kanaal
+    const otherChan = (url) => /^https:\/\/(www\.)?twitch\.tv\/[a-z0-9_]{2,25}\/?([?#]|$)/i.test(url) || /[?&]referrer=raid/i.test(url);
+    v.webContents.on('will-navigate', (ev, url) => {
+      if (own(url)) return;
+      ev.preventDefault();
+      if (otherChan(url)) v.webContents.loadURL(tvPage(ch)); else shell.openExternal(url);
+    });
     // twitch.tv wisselt ook van pagina zonder te herladen; dan terug naar het kanaal
     v.webContents.on('did-navigate-in-page', (ev, url, isMain) => {
-      if (isMain && !own(url)) { shell.openExternal(url); v.webContents.loadURL(tvPage(ch)); }
+      if (isMain && !own(url)) { if (!otherChan(url)) shell.openExternal(url); v.webContents.loadURL(tvPage(ch)); }
     });
     v.webContents.on('dom-ready', () => v.webContents.insertCSS(TV_CSS).catch(() => {}));
     // volledig scherm (knop in de speler of dubbelklik): de weergave zelf over het hele venster
