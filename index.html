@@ -80,7 +80,12 @@
   header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--panel);
     border-bottom: 1px solid var(--line); flex-wrap: wrap; }
   header h1 { font-size: 15px; margin: 0 8px 0 0; white-space: nowrap; }
-  #shortcutBar { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; align-items: center; }
+  #scDd { position: fixed; z-index: 16; width: 320px; max-width: calc(100vw - 16px); max-height: 70vh; overflow-y: auto; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.5); padding: 10px; }
+  #scDd[hidden] { display: none; }
+  #shortcutBar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  #shortcutBar .sc { min-height: 34px; }
+  #scDdBtn.on { border-color: var(--accent); }
   .sc { display: inline-flex; align-items: center; gap: 6px; }
   .sc kbd, kbd { font: 11px ui-monospace, Consolas, monospace; background: var(--bg); border: 1px solid var(--line);
     border-radius: 4px; padding: 0 5px; color: var(--muted); }
@@ -353,13 +358,13 @@
     #mview.view-chat, #mview.view-mod { max-width: 720px; width: 100%; margin: 0 auto; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
   }
   @media (max-width: 768px) {
-    #shortcutBar, header h1 { display: none; }
+    header h1 { display: none; }
     #cloudInd { font-size: 0; } #cloudInd::before { content: '☁'; font-size: 16px; }
     #layBtns { display: none; }
     #viewBtn, #modlogBtn { font-size: 0; } #viewBtn::before { content: '▣'; font-size: 16px; } #modlogBtn::before { content: '📋'; font-size: 16px; }
     header { gap: 6px; }
     #selInfo { order: 10; flex-basis: 100%; max-width: none; }
-    #addScBtn { font-size: 0; } #addScBtn::before { content: '✎'; font-size: 16px; }
+    #scDdBtn { font-size: 0; } #scDdBtn::before { content: '⚡'; font-size: 16px; }
   }
   .player-off { margin: auto; padding: 16px; text-align: center; color: var(--muted); max-width: 320px; }
   #emptyHint { margin: auto; text-align: center; color: var(--muted); max-width: 420px; }
@@ -485,9 +490,8 @@
     <h1>R5 ModHub</h1>
     <span class="seg modesw" id="modeSw" title="Alleen Twitch, of Twitch samen met YouTube, TikTok en Instagram"><button data-mode="twitch">🟣 Twitch</button><button data-mode="multi">🌐 Multi</button></span>
     <button id="addZoneBtn" title="Zone toevoegen in dit tabblad">+ Zone</button>
-    <div id="shortcutBar"></div>
+    <button id="scDdBtn" class="primary" title="Je sneltoetsen (klik een knop om hem uit te voeren, rechtsklik om te bewerken)">⚡ Sneltoetsen ▾</button>
     <span id="layBtns"><button id="tidyBtn" title="Alle blokken in dit tabblad netjes naast en onder elkaar zetten, zonder gaten">▦ Netjes schikken</button><button id="layBtn" title="Blokken in dit tabblad aan- of uitzetten">✎ Indeling</button><button id="custBtn" title="Je eigen vaste indeling voor dit tabblad ontwerpen; ▦ Netjes schikken gaat daarna altijd terug naar deze indeling">▣ Eigen indeling</button></span>
-    <button id="addScBtn" class="primary" title="Sneltoetsen bewerken of verwijderen">✎ Sneltoetsen</button>
     <button id="cloudInd" hidden title="Cloud-back-up (klik voor instellingen)"></button>
     <button id="bellBtn" title="Meldingen">🔔</button>
     <button id="helpBtn" title="Hulp: wat kan R5 ModHub allemaal?">❓</button>
@@ -790,7 +794,7 @@
     <details class="help-sec">
       <summary><span class="hi">⚡</span>Sneltoetsen<small>eigen knoppen en toetsen</small></summary>
       <ul>
-        <li>Via <b>✎ Sneltoetsen</b> maak je knoppen: chatbericht, timeout, ban, unban of bericht verwijderen.</li>
+        <li>Via <b>⚡ Sneltoetsen</b> in de bovenbalk zie je al je knoppen; met <b>✎ Sneltoetsen bewerken</b> onderin maak je ze: chatbericht, timeout, ban, unban of bericht verwijderen.</li>
         <li>Geef er optioneel een <b>toets</b> bij, zoals F1, Ctrl+1 of Alt+T.</li>
         <li>Variabelen in berichten: <b>{user}</b>, <b>{channel}</b> en <b>{game}</b>.</li>
         <li><b>Rechtsklik</b> op een knop om hem te bewerken. <b>Esc</b> haalt de selectie weg.</li>
@@ -830,6 +834,7 @@
           <summary>Nieuw sinds 4.0.0 <small>26 okt 2026</small></summary>
           <ul>
             <li><b>☁ Cloud-sync via je Twitch-account</b>: tabbladen, indeling, sneltoetsen, instellingen, notities, woordfilter, modlog en kijkersgrafiek zijn op elke pc en in elke browser hetzelfde zodra je inlogt. Geen GitHub-token meer nodig; staat standaard aan en kun je uitzetten in ⚙ Instellingen. Je inlog gaat nooit mee, en modlog en grafiek ouder dan 90 dagen worden opgeschoond.</li>
+            <li><b>⚡ Sneltoetsen</b> staan niet meer los in de bovenbalk maar in één knop: klik erop en je ziet al je sneltoetsen in een uitklapmenu, met onderaan ✎ Sneltoetsen bewerken. De toetscombinaties werken gewoon zoals altijd.</li>
             <li><b>Verplichte update</b> in de Windows-app: staat er bij het opstarten een nieuwe versie klaar, dan wordt die eerst gedownload en geïnstalleerd voordat je verder kunt.</li>
           </ul>
         </details>
@@ -1043,6 +1048,7 @@
 <div id="card" hidden></div>
 <div id="chatdd" hidden></div>
 <div id="bellDd" hidden></div>
+<div id="scDd" hidden><div id="shortcutBar"></div><button id="addScBtn" class="dd-link" title="Sneltoetsen toevoegen, bewerken of verwijderen">✎ Sneltoetsen bewerken</button></div>
 <div id="picker" hidden></div>
 <div id="toasts"></div>
 <div id="players"></div>
@@ -2536,7 +2542,7 @@
     const modal = rqDrag || !!document.fullscreenElement || !!document.querySelector('.modal-bg.open, #picker:not([hidden])');
     // gebruikerskaart, chatmenu en meldingen liggen in de site; de wachtrij van de app ligt daar
     // altijd bovenop, dus verbergen zolang zo'n venster over het blok valt
-    const pops = [...document.querySelectorAll('#card:not([hidden]), #chatdd:not([hidden]), #bellDd:not([hidden])')].map((el) => el.getBoundingClientRect());
+    const pops = [...document.querySelectorAll('#card:not([hidden]), #chatdd:not([hidden]), #bellDd:not([hidden]), #scDd:not([hidden])')].map((el) => el.getBoundingClientRect());
     Object.values(zoneEls).forEach((z) => {
       if (z.webSlot) return syncWeb(z, modal, pops);
       const s = z.rqSlot || z.tvSlot;
@@ -4228,10 +4234,11 @@
       b.className = 'sc' + (USER_TYPES.includes(sc.type) ? ' user-action' : '');
       b.title = TYPE_LABEL[sc.type] + (sc.type === 'msg' ? ': ' + sc.text : '') + ' (rechtsklik om te bewerken)';
       b.innerHTML = esc(sc.name) + (sc.key ? ' <kbd>' + esc(sc.key) + '</kbd>' : '');
-      b.onclick = () => runShortcut(sc);
-      b.oncontextmenu = (e) => { e.preventDefault(); openScModal(sc); };
+      b.onclick = () => { closeScDd(); runShortcut(sc); };
+      b.oncontextmenu = (e) => { e.preventDefault(); closeScDd(); openScModal(sc); };
       bar.appendChild(b);
     });
+    if (!state.shortcuts.length) bar.innerHTML = '<p class="hint" style="margin:0">Nog geen sneltoetsen.</p>';
     const list = $('#scList');
     list.innerHTML = state.shortcuts.length ? '' : '<li class="hint">Nog geen sneltoetsen. Maak er een met + Nieuwe sneltoets.</li>';
     state.shortcuts.forEach((sc) => {
@@ -4312,6 +4319,7 @@
     }
     if (e.key === 'Escape') {
       if (!$('#chatdd').hidden) closeChatDd();
+      else if (!$('#scDd').hidden) closeScDd();
       else if (!$('#picker').hidden) $('#picker').hidden = true;
       else if (!$('#card').hidden) closeCard(); else clearSel();
       return;
@@ -4418,7 +4426,20 @@
   $('#tidyBtn').onclick = () => { tidyTab(); toast(curTab().custom ? 'Terug naar je eigen indeling.' : 'Blokken netjes geschikt.'); };
   $('#layBtn').onclick = () => openTabEdit(state.tab);
   $('#custBtn').onclick = openCustom;
-  $('#addScBtn').onclick = () => { renderShortcuts(); openModal('scListModal'); };
+  $('#addScBtn').onclick = () => { closeScDd(); renderShortcuts(); openModal('scListModal'); };
+  function closeScDd() { $('#scDd').hidden = true; $('#scDdBtn').classList.remove('on'); }
+  $('#scDdBtn').onclick = () => {
+    const dd = $('#scDd');
+    if (!dd.hidden) return closeScDd();
+    renderShortcuts();
+    dd.hidden = false; $('#scDdBtn').classList.add('on');
+    const r = $('#scDdBtn').getBoundingClientRect(), w = dd.offsetWidth;
+    dd.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
+    dd.style.top = (r.bottom + 6) + 'px';
+  };
+  document.addEventListener('mousedown', (e) => {
+    if (!$('#scDd').hidden && !e.target.closest('#scDd') && !e.target.closest('#scDdBtn')) closeScDd();
+  });
   $('#scNewBtn').onclick = () => { closeModal('scListModal'); backToList = true; openScModal(null); };
   $('#scType').onchange = updateScFields;
   $('#scKey').onclick = () => { listening = !listening; updateKeyBtn(); };
