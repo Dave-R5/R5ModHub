@@ -305,6 +305,9 @@ function createWindow() {
     else shell.openExternal(url);
   });
   win.webContents.on('did-start-navigation', (d) => { if (d.isMainFrame && !d.isSameDocument) closeAllRq(); });
+  win.on('enter-full-screen', () => tvWindowFullChanged());
+  win.on('leave-full-screen', () => tvWindowFullChanged());
+  win.on('resize', () => tvWindowFullChanged());
   win.webContents.on('did-fail-load', (_e, code, desc, url, isMain) => {
     if (!isMain || code === -3) return;
     win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(
@@ -433,20 +436,49 @@ ipcMain.on('r5:tv-show', (e, ch, r) => {
       if (isMain && !own(url)) { shell.openExternal(url); v.webContents.loadURL(tvPage(ch)); }
     });
     v.webContents.on('dom-ready', () => v.webContents.insertCSS(TV_CSS).catch(() => {}));
+    // volledig scherm (knop in de speler of dubbelklik): de weergave zelf over het hele venster
+    // leggen en het venster op volledig scherm zetten; anders blijft de video in het kleine blok
+    v.webContents.on('enter-html-full-screen', () => {
+      v.full = true;
+      win.contentView.addChildView(v); // bovenop de andere weergaven
+      if (!win.isFullScreen()) { v.madeFull = true; win.setFullScreen(true); }
+      tvFit(v);
+    });
+    v.webContents.on('leave-html-full-screen', () => {
+      v.full = false;
+      if (v.madeFull && win.isFullScreen()) win.setFullScreen(false);
+      v.madeFull = false;
+      // de site zet hem bij de volgende frame weer op de plek van het blok
+      if (v.last) v.setBounds(v.last);
+    });
     v.webContents.loadURL(tvPage(ch));
     win.contentView.addChildView(v);
     tv.set(ch, v);
     v.size = { width: 640, height: 360 };
   }
+  if (v.full) return tvFit(v);
   const z = win.webContents.getZoomFactor();
   if (r.w > 0 && r.h > 0) {
     v.size = { width: Math.round(r.w * z), height: Math.round(r.h * z) };
-    v.setBounds({ x: Math.round(r.x * z), y: Math.round(r.y * z), ...v.size });
+    v.last = { x: Math.round(r.x * z), y: Math.round(r.y * z), ...v.size };
   } else {
     // niet te zien: buiten beeld zetten in plaats van verbergen, zodat de stream doorspeelt
-    v.setBounds({ x: -20000, y: 0, ...v.size });
+    v.last = { x: -20000, y: 0, ...v.size };
   }
+  v.setBounds(v.last);
 });
+function tvFit(v) {
+  const b = win.getContentBounds();
+  v.setBounds({ x: 0, y: 0, width: b.width, height: b.height });
+}
+// F11 of Esc op het venster terwijl een speler op volledig scherm staat: de speler ook terugzetten
+function tvWindowFullChanged() {
+  tv.forEach((v) => {
+    if (!v.full) return;
+    if (!win.isFullScreen() && v.madeFull) { v.madeFull = false; v.webContents.executeJavaScript('document.exitFullscreen && document.fullscreenElement && document.exitFullscreen()').catch(() => {}); }
+    else tvFit(v);
+  });
+}
 ipcMain.on('r5:tv-close', (e, ch) => {
   if (!fromSite(e) || !win) return;
   const v = tv.get(ch);
