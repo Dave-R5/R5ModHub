@@ -92,7 +92,8 @@
   .sc.user-action { border-color: #5a3d99; }
   #account { color: var(--muted); font-size: 12px; white-space: nowrap; }
   #account.on { color: var(--ok); font-size: 16px; }
-  #account { margin-left: auto; }
+  #bellBtn { margin-left: auto; }
+  header #modeSw { margin-left: 0; }
   #selInfo { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
   #selInfo:empty { display: none; }
   #selInfo b { color: var(--text); }
@@ -363,7 +364,7 @@
   }
   @media (max-width: 768px) {
     header h1 { display: none; }
-    #cloudInd { font-size: 0; } #cloudInd::before { content: '☁'; font-size: 16px; }
+    #cloudInd { font-size: 0; } #cloudInd::before { content: '☁'; font-size: 16px; } #cloudInd.sync::before { content: none; }
     .laybtn { display: none; }
     #viewBtn, #modlogBtn { font-size: 0; } #viewBtn::before { content: '▣'; font-size: 16px; } #modlogBtn::before { content: '📋'; font-size: 16px; }
     header { gap: 6px; }
@@ -495,12 +496,12 @@
     <span class="seg modesw" id="modeSw" title="Alleen Twitch, of Twitch samen met YouTube, TikTok en Instagram"><button data-mode="twitch">🟣 Twitch</button><button data-mode="multi">🌐 Multi</button></span>
     <button id="addZoneBtn" title="Zone toevoegen in dit tabblad">+ Zone</button>
     <button id="scDdBtn" class="primary" title="Je sneltoetsen (klik een knop om hem uit te voeren, rechtsklik om te bewerken)">⚡ Sneltoetsen ▾</button>
-    <button id="cloudInd" hidden title="Cloud-back-up (klik voor instellingen)"></button>
+    <span id="selInfo"></span>
     <button id="bellBtn" title="Meldingen">🔔</button>
     <button id="helpBtn" title="Hulp: wat kan R5 ModHub allemaal?">❓</button>
     <button id="modlogBtn" title="Modlog: wat jij als mod hebt gedaan">📋 Modlog</button>
     <button id="viewBtn" hidden title="Weergave kiezen">▣ Weergave</button>
-    <span id="selInfo"></span>
+    <button id="cloudInd" hidden title="Cloud-back-up (klik voor instellingen)"></button>
     <span id="account">niet ingelogd</span>
     <button id="settingsBtn" title="Instellingen">⚙</button>
   </header>
@@ -837,6 +838,7 @@
           <summary>Nieuw sinds 4.0.0 <small>26 okt 2026</small></summary>
           <ul>
             <li><b>☁ Cloud-sync via je Twitch-account</b>: tabbladen, indeling, sneltoetsen, instellingen, notities, woordfilter, modlog en kijkersgrafiek zijn op elke pc en in elke browser hetzelfde zodra je inlogt. Geen GitHub-token meer nodig; staat standaard aan en kun je uitzetten in ⚙ Instellingen. Je inlog gaat nooit mee, en modlog en grafiek ouder dan 90 dagen worden opgeschoond.</li>
+            <li><b>Bovenbalk opnieuw ingedeeld</b>: links Twitch/Multi, + Zone en ⚡ Sneltoetsen; rechts 🔔, ❓ en Modlog, met het ☁-wolkje naast je online-stip.</li>
             <li><b>🎨 Personaliseer</b> rechts in de tabbladbalk: ▦ Netjes schikken, ✎ Indeling en ▣ Eigen indeling zitten nu samen in één uitklapmenu, zodat de bovenbalk rustiger is.</li>
             <li><b>⚡ Sneltoetsen</b> staan niet meer los in de bovenbalk maar in één knop: klik erop en je ziet al je sneltoetsen in een uitklapmenu, met onderaan ✎ Sneltoetsen bewerken. De toetscombinaties werken gewoon zoals altijd.</li>
             <li><b>Verplichte update</b> in de Windows-app: staat er bij het opstarten een nieuwe versie klaar, dan wordt die eerst gedownload en geïnstalleerd voordat je verder kunt.</li>
