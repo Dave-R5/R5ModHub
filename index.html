@@ -365,6 +365,8 @@
 
   .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 10; padding: 16px; }
   .modal-bg.open { display: flex; }
+  #mustUpd { z-index: 1000; background: rgba(0,0,0,.85); }
+  #mustUpd .modal { max-width: 420px; text-align: center; }
   .modal { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; width: 100%; max-width: 460px; max-height: 90vh; overflow-y: auto; }
   .modal h2 { margin: 0 0 12px; font-size: 16px; }
   .modal label { display: block; margin: 10px 0 4px; font-size: 12px; color: var(--muted); }
@@ -500,6 +502,17 @@
 </div>
 
 <!-- Kanaal toevoegen -->
+<div class="modal-bg must" id="mustUpd">
+  <div class="modal">
+    <h2>Update verplicht</h2>
+    <p class="hint" id="mustUpdText">Er is een nieuwe versie van R5 ModHub. Die wordt nu eerst geïnstalleerd; daarna start de app vanzelf opnieuw.</p>
+    <div class="exe-bar" id="mustUpdBar" hidden><div></div></div>
+    <div class="row" style="justify-content:center;margin-top:10px">
+      <button class="primary" id="mustUpdBtn" hidden>Opnieuw proberen</button>
+      <a href="https://r5mod.nl/download/modhub" target="_blank" rel="noopener" id="mustUpdLink" hidden>Handmatig downloaden</a>
+    </div>
+  </div>
+</div>
 <div class="modal-bg" id="askModal">
   <div class="modal" style="max-width:420px">
     <label for="askInput" id="askMsg" style="white-space:pre-line"></label>
@@ -619,8 +632,17 @@
       <button id="importBtn">Importeren</button>
       <input type="file" id="importFile" accept=".json" hidden>
     </div>
+    <div id="syncBox">
+      <label class="optrow"><input type="checkbox" id="syncOn"> ☁ Synchroniseren via je Twitch-account</label>
+      <p class="hint">Tabbladen, indeling, sneltoetsen, instellingen, notities, woordfilter, modlog en kijkersgrafiek zijn dan op elke pc en in elke browser hetzelfde zodra je inlogt met Twitch. Je inlog en sleutels gaan nooit mee. Modlog en grafiek ouder dan 90 dagen worden opgeschoond.</p>
+      <div class="row" style="justify-content:flex-start">
+        <button id="syncNow">Nu synchroniseren</button>
+        <button id="syncWipe">Cloud-gegevens wissen</button>
+      </div>
+      <p class="hint" id="syncState"></p>
+    </div>
     <details class="howto" id="cloudBox">
-      <summary>Cloud-back-up (via GitHub)</summary>
+      <summary>Extra back-up via GitHub (optioneel)</summary>
       <p class="hint">Je instellingen, sneltoetsen, notities, woordfilter en modlog worden bewaard in een geheime gist op je eigen GitHub-account. Zo zet je alles in één klik over naar een ander apparaat.</p>
       <ol>
         <li>Maak op GitHub een token: <a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=R5%20ModHub%20backup" target="_blank" rel="noopener">github.com/settings/tokens/new</a>. Alleen het vinkje <b>gist</b> is nodig. Kies bij Expiration bijv. <b>No expiration</b>.</li>
@@ -804,6 +826,13 @@
       <summary><span class="hi">📜</span>Changelog<small>wat is er veranderd</small></summary>
       <div class="cl">
         <details class="cl-ver" open>
+          <summary>Nieuw sinds 4.0.0 <small>26 okt 2026</small></summary>
+          <ul>
+            <li><b>☁ Cloud-sync via je Twitch-account</b>: tabbladen, indeling, sneltoetsen, instellingen, notities, woordfilter, modlog en kijkersgrafiek zijn op elke pc en in elke browser hetzelfde zodra je inlogt. Geen GitHub-token meer nodig; staat standaard aan en kun je uitzetten in ⚙ Instellingen. Je inlog gaat nooit mee, en modlog en grafiek ouder dan 90 dagen worden opgeschoond.</li>
+            <li><b>Verplichte update</b> in de Windows-app: staat er bij het opstarten een nieuwe versie klaar, dan wordt die eerst gedownload en geïnstalleerd voordat je verder kunt.</li>
+          </ul>
+        </details>
+        <details class="cl-ver">
           <summary>Versie 4.0.0 <small>26 okt 2026</small></summary>
           <ul>
             <li><b>Installeren</b> voor alle gebruikers zet de Windows-app nu standaard in <code>C:\Program Files\R5Mod\R5 ModHub</code>, en in het Startmenu staat hij in de map <b>R5Mod</b>. Een bestaande installatie blijft gewoon waar hij staat.</li>
@@ -1051,11 +1080,14 @@
   // ---------- opslag ----------
   const store = {
     get(k, d) { try { const v = localStorage.getItem('modv.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-    set(k, v) { try { localStorage.setItem('modv.' + k, JSON.stringify(v)); } catch {} if (CLOUD_KEYS.includes(k)) cloudTouch(); },
+    set(k, v) { try { localStorage.setItem('modv.' + k, JSON.stringify(v)); } catch {} if (CLOUD_KEYS.includes(k)) cloudTouch(); if (SYNC_KEYS.includes(k)) syncTouch(k); },
     del(k) { try { localStorage.removeItem('modv.' + k); } catch {} },
   };
   const CLOUD_KEYS = ['tabs', 'mtabs', 'mode', 'shortcuts', 'opts', 'words', 'notes', 'modlog', 'extraChans'];
   const cloudSync = { t: null };
+  // Cloud-sync via r5mod.nl (zie syncPull/syncPush). Nooit token, gistToken of gistId: die blijven op dit apparaat.
+  const SYNC_KEYS = ['tabs', 'mtabs', 'tab', 'mtab', 'mode', 'shortcuts', 'opts', 'words', 'notes', 'modlog', 'extraChans', 'favChans', 'twChatOn', 'bell', 'cardPos', 'vhist', 'raids'];
+  const twSync = { dirty: new Set(), t: null, busy: false, at: {}, st: '' };
   // opties; de hl-* zijn de kleuren in de chat die je via ⚙ Chat aan en uit zet
   const opts = Object.assign({ hlWords: true, hlMention: true, hlFirst: true, hlEvents: true, notifyLive: false, notifyMention: false, cloudAuto: false }, store.get('opts', {}));
   let words = store.get('words', []);      // woordfilter, kleine letters
@@ -4274,7 +4306,7 @@
       return;
     }
     if (document.querySelector('.modal-bg.open')) {
-      if (e.key === 'Escape') document.querySelectorAll('.modal-bg.open').forEach((m) => m.classList.remove('open'));
+      if (e.key === 'Escape') document.querySelectorAll('.modal-bg.open:not(.must)').forEach((m) => m.classList.remove('open'));
       return;
     }
     if (e.key === 'Escape') {
@@ -4353,7 +4385,7 @@
   // ---------- knoppen ----------
   document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => b.closest('.modal-bg').classList.remove('open')));
   $('#scModal [data-close]').onclick = closeScModal;
-  document.querySelectorAll('.modal-bg').forEach((m) => m.addEventListener('mousedown', (e) => { if (e.target === m) m.classList.remove('open'); }));
+  document.querySelectorAll('.modal-bg:not(.must)').forEach((m) => m.addEventListener('mousedown', (e) => { if (e.target === m) m.classList.remove('open'); }));
   if (MULTI) $('#zoneKind').insertAdjacentHTML('beforeend', '<option value="yt">YouTube-chat</option><option value="tt">TikTok LIVE (Windows-app)</option><option value="ig">Instagram Live (Windows-app)</option>');
   $('#zoneKind').onchange = () => {
     const k = $('#zoneKind').value;
@@ -4398,7 +4430,7 @@
     renderAccount();
     $('#wordsBox').value = words.join('\n');
     $('#notifyLive').checked = opts.notifyLive; $('#notifyMention').checked = opts.notifyMention; renderNotifyHint();
-    $('#gistToken').value = store.get('gistToken', ''); $('#cloudAuto').checked = opts.cloudAuto; renderCloud();
+    $('#gistToken').value = store.get('gistToken', ''); $('#cloudAuto').checked = opts.cloudAuto; renderCloud(); renderSync();
     openModal('setModal'); };
   $('#modlogBtn').onclick = () => { renderModlog(); openModal('modlogModal'); };
   $('#helpBtn').onclick = () => {
@@ -4519,7 +4551,195 @@
     b.className = { ok: '', err: 'err' }[cur] ?? 'wait';
     b.textContent = { ok: '☁ Gesynchroniseerd', wait: '☁ Wijziging wacht', busy: '☁ Bezig…', err: '☁ Niet gelukt', none: '☁ Nog geen back-up' }[cur];
   }
-  $('#cloudInd').onclick = () => { $('#settingsBtn').click(); $('#cloudBox').open = true; };
+  $('#cloudInd').onclick = () => { $('#settingsBtn').click(); if (!syncActive()) $('#cloudBox').open = true; };
+
+  // ---------- cloud-sync via je Twitch-account (r5mod.nl/api/sync) ----------
+  // Elk onderdeel (tabs, notes, modlog, …) is los opgeslagen met een versienummer. Bij het openen halen we op wat
+  // een ander apparaat veranderde; bij een wijziging gaat na 30 seconden alleen dat onderdeel terug. Had een ander
+  // apparaat het intussen ook gewijzigd, dan voegen we samen (notities, modlog, grafiek) of wint deze wijziging.
+  const SYNC_API = 'https://r5mod.nl/api/sync';
+  const SYNC_SLOW = { vhist: 10 * 60e3, raids: 10 * 60e3 };   // grafiek verandert elke minuut: hooguit elke 10 minuten
+  const DAY = 86400e3;
+  const syncOff = () => { try { return localStorage.getItem('r5sync.off') === '1'; } catch { return false; } };
+  const syncActive = () => !syncOff() && !!state.me && !!state.token;
+  const syncVers = () => { try { return JSON.parse(localStorage.getItem('r5sync.vers') || 'null'); } catch { return null; } };
+  const setSyncVers = (v) => { try { localStorage.setItem('r5sync.vers', JSON.stringify({ ...v, user: state.me.user_id })); } catch {} };
+  const rawGet = (k) => { try { return localStorage.getItem('modv.' + k); } catch { return null; } };
+  const rawSet = (k, v) => { try { if (v === 'null' || v == null) localStorage.removeItem('modv.' + k); else localStorage.setItem('modv.' + k, v); } catch {} };
+  const jparse = (t, d) => { try { const v = JSON.parse(t); return v == null ? d : v; } catch { return d; } };
+  // wat er naar de cloud gaat: geschiedenis ouder dan 90 dagen eraf
+  function syncOut(k) {
+    const raw = rawGet(k);
+    if (raw == null) return 'null';
+    const cut = Date.now() - 90 * DAY;
+    if (k === 'modlog') return JSON.stringify(jparse(raw, []).filter((x) => x && x.t > cut).slice(-3000));
+    if (k === 'bell') return JSON.stringify(jparse(raw, []).slice(-200));
+    if (k === 'vhist' || k === 'raids') {
+      const o = jparse(raw, {});
+      Object.keys(o).forEach((ch) => { o[ch] = (o[ch] || []).filter((p) => p[0] > cut); if (!o[ch].length) delete o[ch]; });
+      return JSON.stringify(o);
+    }
+    return raw;
+  }
+  // twee versies van hetzelfde onderdeel samenvoegen; mine = dit apparaat
+  function syncMerge(k, mine, theirs) {
+    if (theirs == null || theirs === 'null') return mine;
+    if (mine == null || mine === 'null') return theirs;
+    if (k === 'notes' || k === 'twChatOn') return JSON.stringify({ ...jparse(theirs, {}), ...jparse(mine, {}) });
+    if (k === 'modlog' || k === 'bell') {
+      const seen = new Set(), out = [];
+      [...jparse(theirs, []), ...jparse(mine, [])].forEach((x) => { const id = JSON.stringify(x); if (!seen.has(id)) { seen.add(id); out.push(x); } });
+      return JSON.stringify(out.sort((a, b) => (a.t || 0) - (b.t || 0)).slice(k === 'bell' ? -200 : -3000));
+    }
+    if (k === 'vhist' || k === 'raids') {
+      const a = jparse(theirs, {}), b = jparse(mine, {}), out = {};
+      new Set([...Object.keys(a), ...Object.keys(b)]).forEach((ch) => {
+        const m = new Map();
+        [...(a[ch] || []), ...(b[ch] || [])].forEach((p) => m.set(p[0], p));
+        out[ch] = [...m.values()].sort((x, y) => x[0] - y[0]);
+      });
+      return JSON.stringify(out);
+    }
+    if (k === 'favChans' || k === 'extraChans' || k === 'words') {
+      const all = [...jparse(theirs, []), ...jparse(mine, [])];
+      return JSON.stringify(all.filter((x, i) => all.findIndex((y) => JSON.stringify(y) === JSON.stringify(x)) === i));
+    }
+    return mine;
+  }
+  async function syncFetch(method, path, body, keepalive) {
+    const r = await fetch(SYNC_API + path, {
+      method, keepalive: !!keepalive,
+      headers: { Authorization: 'Bearer ' + state.token, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(r.status === 401 ? 'log opnieuw in met Twitch' : r.status === 413 ? 'te veel gegevens voor de cloud' : j.error || 'fout ' + r.status);
+    return j;
+  }
+  function renderSync(st) {
+    if (st) twSync.st = st;
+    const at = +(localStorage.getItem('r5sync.at') || 0);
+    $('#syncOn').checked = !syncOff();
+    $('#syncNow').disabled = $('#syncWipe').disabled = !syncActive();
+    $('#syncState').textContent = syncOff() ? 'Uit op dit apparaat.'
+      : !state.me ? 'Log in met Twitch om te synchroniseren.'
+      : twSync.st === 'err' ? 'Synchroniseren is niet gelukt: ' + (twSync.err || '') : at ? 'Laatst gesynchroniseerd: ' + new Date(at).toLocaleString('nl-NL') : 'Nog niet gesynchroniseerd.';
+    if (!store.get('gistToken', '')) {
+      const b = $('#cloudInd');
+      b.hidden = !syncActive();
+      b.className = { err: 'err', wait: 'wait', busy: 'wait' }[twSync.st] || '';
+      b.textContent = { wait: '☁ Wijziging wacht', busy: '☁ Bezig…', err: '☁ Niet gelukt' }[twSync.st] || '☁ Gesynchroniseerd';
+      b.title = 'Cloud-sync via je Twitch-account (klik voor instellingen)';
+    }
+  }
+  function syncTouch(k) {
+    if (twSync.applying || !twSync.ready) return;   // opslaan tijdens het opstarten is geen wijziging van jou
+    twSync.dirty.add(k);
+    if (!syncActive()) return;
+    clearTimeout(twSync.t);
+    twSync.t = setTimeout(() => syncPush().catch(() => {}), 30000);
+    renderSync('wait');
+  }
+  // alles wat gewijzigd is naar de cloud; bij een botsing samenvoegen en nog eens
+  async function syncPush(all, keepalive) {
+    if (!syncActive() || twSync.busy) return;
+    const vers = syncVers();
+    if (!vers || vers.user !== state.me.user_id) return;   // eerst ophalen (syncPull)
+    const now = Date.now(), keys = [...twSync.dirty].filter((k) => all || !SYNC_SLOW[k] || now - (twSync.at[k] || 0) > SYNC_SLOW[k]);
+    if (!keys.length) { if (twSync.dirty.size) { clearTimeout(twSync.t); twSync.t = setTimeout(() => syncPush().catch(() => {}), 60000); } return renderSync(''); }
+    twSync.busy = true; renderSync('busy');
+    try {
+      // iets dat hier en in de cloud nooit bestond, hoeft niet mee
+      let parts = Object.fromEntries(keys.map((k) => [k, { data: syncOut(k), base: vers[k] || 0 }]).filter(([, p]) => p.base || p.data !== 'null'));
+      keys.forEach((k) => twSync.dirty.delete(k));
+      for (let round = 0; round < 3 && Object.keys(parts).length; round++) {
+        const r = await syncFetch('POST', '', { app: 'modhub', parts }, keepalive);
+        Object.assign(vers, r.vers || {});
+        Object.keys(r.vers || {}).forEach((k) => (twSync.at[k] = now));
+        const again = {};
+        Object.entries(r.conflicts || {}).forEach(([k, c]) => {
+          const merged = syncMerge(k, parts[k].data, c.data);
+          if (merged !== c.data) { again[k] = { data: merged, base: c.ver }; } else vers[k] = c.ver;
+          if (merged !== parts[k].data) { twSync.applying = true; rawSet(k, merged); twSync.applying = false; }
+        });
+        parts = again;
+      }
+      setSyncVers(vers);
+      localStorage.setItem('r5sync.at', String(Date.now()));
+      twSync.busy = false; renderSync(twSync.dirty.size ? 'wait' : 'ok');
+    } catch (e) {
+      keys.forEach((k) => twSync.dirty.add(k));
+      twSync.busy = false; twSync.err = e.message; renderSync('err');
+      throw e;
+    }
+  }
+  // bij het openen (na inloggen): ophalen wat een ander apparaat veranderde. Veranderde er iets, dan één keer herladen.
+  async function syncPull() {
+    if (!syncActive()) return renderSync();
+    try {
+      const r = await syncFetch('GET', '?app=modhub');
+      const remote = r.parts || {};
+      let vers = syncVers();
+      const first = !vers || vers.user !== state.me.user_id;
+      const hasLocal = SYNC_KEYS.some((k) => rawGet(k) != null);
+      const hasRemote = Object.keys(remote).length > 0;
+      let useCloud = true;
+      if (first && hasLocal && hasRemote) {
+        useCloud = await askChoice('Je hebt al instellingen in de cloud (van een andere pc of browser). Welke wil je hier gebruiken? Notities, modlog en grafiek worden altijd samengevoegd.',
+          ['Uit de cloud', 'Van dit apparaat']) !== 1;
+      }
+      if (first) vers = {};
+      let changed = false;
+      twSync.applying = true;
+      Object.entries(remote).forEach(([k, p]) => {
+        if (!SYNC_KEYS.includes(k) || p.ver <= (vers[k] || 0)) return;
+        const mine = rawGet(k);
+        let next;
+        if (first) next = useCloud ? syncMerge(k, p.data, mine) : syncMerge(k, mine, p.data);
+        else next = twSync.dirty.has(k) ? syncMerge(k, mine, p.data) : p.data;
+        if (first && !useCloud && !['notes', 'modlog', 'vhist', 'raids', 'bell', 'twChatOn', 'favChans', 'extraChans', 'words'].includes(k)) next = mine == null ? p.data : mine;
+        if (next !== p.data) twSync.dirty.add(k);
+        if ((next ?? 'null') !== (mine ?? 'null')) { rawSet(k, next); changed = true; }
+        vers[k] = p.ver;
+      });
+      twSync.applying = false;
+      if (first) SYNC_KEYS.forEach((k) => { if (rawGet(k) != null && !remote[k]) twSync.dirty.add(k); });
+      setSyncVers(vers);
+      localStorage.setItem('r5sync.at', String(Date.now()));
+      if (twSync.dirty.size) await syncPush(true).catch(() => {});
+      renderSync('ok');
+      if (changed) { toast('Instellingen van je andere apparaat opgehaald.', 'ok'); setTimeout(() => location.reload(), 600); return true; }
+    } catch (e) {
+      twSync.applying = false;
+      twSync.err = e.message; renderSync('err');
+    }
+    return false;
+  }
+  // keuze tussen twee knoppen in het bestaande vraagvenster; valt terug op confirm()
+  function askChoice(text, labels) {
+    return Promise.resolve(confirm(text + '\n\nOK = ' + labels[0] + ', Annuleren = ' + labels[1]) ? 0 : 1);
+  }
+  $('#syncOn').onchange = (e) => {
+    try { localStorage.setItem('r5sync.off', e.target.checked ? '0' : '1'); } catch {}
+    if (e.target.checked) syncPull(); else renderSync('');
+  };
+  $('#syncNow').onclick = async (e) => {
+    e.target.disabled = true;
+    try { SYNC_KEYS.forEach((k) => twSync.dirty.add(k)); await syncPush(true); toast('Gesynchroniseerd.', 'ok'); } catch (err) { toast('Cloud-sync: ' + err.message, 'err'); }
+    renderSync();
+  };
+  $('#syncWipe').onclick = async () => {
+    if (!confirm('Alle R5 ModHub-gegevens van jouw Twitch-account uit de cloud wissen? Op dit apparaat blijft alles staan, en synchroniseren gaat uit.')) return;
+    try {
+      await syncFetch('POST', '/delete', { app: 'modhub' });
+      localStorage.setItem('r5sync.off', '1'); localStorage.removeItem('r5sync.vers'); localStorage.removeItem('r5sync.at');
+      toast('Cloud-gegevens gewist.', 'ok');
+    } catch (err) { toast('Wissen mislukt: ' + err.message, 'err'); }
+    renderSync('');
+  };
+  // venster sluiten of app afsluiten: wat nog wacht meteen versturen
+  addEventListener('pagehide', () => { if (twSync.dirty.size) syncPush(true, true).catch(() => {}); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && twSync.dirty.size) syncPush(true).catch(() => {}); });
   function renderCloud() {
     const at = store.get('cloudAt', 0);
     $('#cloudState').textContent = at ? 'Laatste back-up naar de cloud: ' + new Date(at).toLocaleString('nl-NL') : 'Nog geen back-up in de cloud gemaakt vanaf dit apparaat.';
@@ -4583,7 +4803,9 @@
   loadBttvFfzGlobal();
   applyOpts();
   renderBell();
-  validate().then(() => {
+  validate().then(async () => {
+    twSync.ready = true;
+    if (await syncPull()) return;   // herlaadt met de instellingen van een ander apparaat
     irc.connect(); loadTwitchEmotes(); loadMy7tv(); loadMyChans(); esubConnect();
     Object.values(zoneEls).forEach((z) => { if (z.kind === 'users') loadUsers(z); if (z.poll) z.poll(); });
   });
@@ -4624,6 +4846,37 @@
     } catch { window.open(page, '_blank'); }
   };
   renderDesktopBtn();
+  // Verplichte update: staat er bij het opstarten een nieuwere Windows-app klaar, dan kun je de app pas gebruiken als die erop staat.
+  // Downloaden en installeren gaan vanzelf; daarna start de app opnieuw. Zonder nieuwere versie (of in de browser) niets.
+  function mustUpdate(u) {
+    if (!u) return;
+    const m = $('#mustUpd'), open = m.classList.contains('open');
+    // alleen bij het opstarten; komt er tijdens het modereren een update uit, dan pas bij de volgende start
+    if (!open && performance.now() > 90000) return;
+    const go = ['available', 'downloading', 'ready', 'old'].includes(u.status) || (open && u.status === 'error');
+    if (!go) { m.classList.remove('open'); return; }
+    m.classList.add('open');
+    const v = u.version ? ' ' + u.version : '';
+    $('#mustUpdText').textContent = {
+      available: 'Er is een nieuwe versie' + v + ' van R5 ModHub. Die wordt nu eerst gedownload en geïnstalleerd; daarna start de app vanzelf opnieuw.',
+      downloading: 'Nieuwe versie' + v + ' downloaden… ' + (u.percent || 0) + '%',
+      ready: 'Versie' + v + ' installeren. De app start zo opnieuw…',
+      old: 'Er is een nieuwe versie' + v + ' van R5 ModHub. Download en installeer die eerst; daarna kun je verder.',
+      error: (u.message || 'Updaten is niet gelukt.') + ' Probeer het opnieuw of download de nieuwe versie zelf.',
+    }[u.status];
+    $('#mustUpdBar').hidden = u.status !== 'downloading';
+    $('#mustUpdBar div').style.width = (u.percent || 0) + '%';
+    $('#mustUpdBtn').hidden = !['error', 'old'].includes(u.status);
+    $('#mustUpdBtn').textContent = u.status === 'old' ? 'Downloaden' : 'Opnieuw proberen';
+    $('#mustUpdLink').hidden = u.status !== 'error';
+    if (u.status === 'available') window.r5app.update('download');
+    if (u.status === 'ready' && !mustUpdate.inst) {
+      mustUpdate.inst = true;
+      // nog wachtende cloud-wijzigingen eerst weg, dan installeren
+      Promise.race([syncPush(true).catch(() => {}), new Promise((ok) => setTimeout(ok, 5000))]).then(() => window.r5app.update('install'));
+    }
+  }
+  $('#mustUpdBtn').onclick = () => (window.r5app.update ? window.r5app.update('check').then(mustUpdate) : window.r5app.openDownload());
   // Windows-app (.exe): zoeken naar updates. Alleen de .exe heeft window.r5app.
   if (window.r5app) {
     $('#exeBox').hidden = false;
@@ -4657,9 +4910,10 @@
         }
       };
       window.r5app.onUpdate(renderExe);
+      window.r5app.onUpdate(mustUpdate);
       $('#exeCheck').onclick = async () => renderExe(await window.r5app.update('check'));
       $('#exeDownload').onclick = async (e) => renderExe(await window.r5app.update(e.currentTarget.dataset.action));
-      window.r5app.update('state').then(renderExe);
+      window.r5app.update('state').then((u) => { renderExe(u); mustUpdate(u); return window.r5app.update('check'); }).then(mustUpdate, () => {});
     } else {
       const exeCheck = async (quiet) => {
         $('#exeState').textContent = 'Bezig met zoeken naar updates…';
@@ -4669,6 +4923,8 @@
         $('#exeState').textContent = 'Versie ' + r.current + '. ' + (r.error ? r.error
           : r.update ? 'Nieuwe versie ' + r.latest + ' is beschikbaar.' : 'Je hebt de nieuwste versie.');
         if (r.update && quiet) toast('Nieuwe versie ' + r.latest + ' van de Windows-app beschikbaar, zie ⚙ Instellingen.', 'ok');
+        // heel oude app (zonder in-place update): verplicht de nieuwe versie downloaden
+        if (r.update) mustUpdate({ status: 'old', version: r.latest });
       };
       $('#exeCheck').onclick = () => exeCheck(false);
       $('#exeDownload').onclick = () => window.r5app.openDownload();
