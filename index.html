@@ -838,6 +838,7 @@
           <summary>Nieuw sinds 4.0.0 <small>26 okt 2026</small></summary>
           <ul>
             <li><b>☁ Cloud-sync via je Twitch-account</b>: tabbladen, indeling, sneltoetsen, instellingen, notities, woordfilter, modlog en kijkersgrafiek zijn op elke pc en in elke browser hetzelfde zodra je inlogt. Geen GitHub-token meer nodig; staat standaard aan en kun je uitzetten in ⚙ Instellingen. Je inlog gaat nooit mee, en modlog en grafiek ouder dan 90 dagen worden opgeschoond.</li>
+            <li><b>Streamtitel</b> staat weer in beeld: in de kop van het streamblok zie je naast de game ook de titel van de stream (volledig in de tooltip).</li>
             <li><b>Bovenbalk opnieuw ingedeeld</b>: links Twitch/Multi, + Zone en ⚡ Sneltoetsen; rechts 🔔, ❓ en Modlog, met het ☁-wolkje naast je online-stip.</li>
             <li><b>🎨 Personaliseer</b> rechts in de tabbladbalk: ▦ Netjes schikken, ✎ Indeling en ▣ Eigen indeling zitten nu samen in één uitklapmenu, zodat de bovenbalk rustiger is.</li>
             <li><b>⚡ Sneltoetsen</b> staan niet meer los in de bovenbalk maar in één knop: klik erop en je ziet al je sneltoetsen in een uitklapmenu, met onderaan ✎ Sneltoetsen bewerken. De toetscombinaties werken gewoon zoals altijd.</li>
@@ -2437,17 +2438,19 @@
     // hoelang live: begintijd elke minuut bij Twitch ophalen, de teller loopt elke seconde
     const up = zone.root.querySelector('.uptime'), vc = zone.root.querySelector('.vcount'), gm = zone.root.querySelector('.game');
     zone.poll = async () => {
-      if (z.channel === 'demo') { zone.started = zone.started || Date.now() - 3725000; zone.vnow = 184; zone.game = 'Just Chatting'; }
+      if (z.channel === 'demo') { zone.started = zone.started || Date.now() - 3725000; zone.vnow = 184; zone.game = 'Just Chatting'; zone.stitle = 'Demo-stream: chillen met de chat'; }
       else if (state.me) {
         try {
           const st = (await helix('GET', 'streams', { user_login: z.channel })).data[0];
-          zone.started = st ? Date.parse(st.started_at) : 0; zone.vnow = st ? st.viewer_count : null; zone.game = st ? await freshGame(z.channel, st.game_name) : '';
+          zone.started = st ? Date.parse(st.started_at) : 0; zone.vnow = st ? st.viewer_count : null; zone.game = st ? await freshGame(z.channel, st.game_name) : ''; zone.stitle = st ? st.title || '' : '';
           if (st) recordViewers(z.channel, st.viewer_count, st.game_name);
         } catch {}
       }
       vc.textContent = zone.started && zone.vnow != null ? '👁 ' + zone.vnow.toLocaleString('nl-NL') : '';
-      gm.textContent = zone.started && zone.game ? '· ' + zone.game : '';
-      gm.title = zone.game ? 'Huidige game: ' + zone.game : '';
+      // game en streamtitel naast de kanaalnaam; past het niet, dan staat alles in de tooltip
+      const gt = [zone.game, zone.stitle].filter(Boolean).join(' · ');
+      gm.textContent = zone.started && gt ? '· ' + gt : '';
+      gm.title = zone.started ? (zone.game ? 'Huidige game: ' + zone.game : '') + (zone.stitle ? (zone.game ? '\n' : '') + 'Titel: ' + zone.stitle : '') : '';
       zone.dot.classList.toggle('live', !!zone.started || !state.me);
     };
     const tick = () => {
