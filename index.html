@@ -837,7 +837,7 @@
         <details class="cl-ver" open>
           <summary>Nieuw sinds 4.0.0 <small>26 okt 2026</small></summary>
           <ul>
-            <li><b>☁ Cloud-sync via je Twitch-account</b>: tabbladen, indeling, sneltoetsen, instellingen, notities, woordfilter, modlog en kijkersgrafiek zijn op elke pc en in elke browser hetzelfde zodra je inlogt. Geen GitHub-token meer nodig; staat standaard aan en kun je uitzetten in ⚙ Instellingen. Je inlog gaat nooit mee, en modlog en grafiek ouder dan 90 dagen worden opgeschoond.</li>
+            <li><b>☁ Cloud-sync via je Twitch-account</b>: tabbladen, indeling, sneltoetsen, instellingen, notities, woordfilter, modlog en kijkersgrafiek zijn op elke pc en in elke browser hetzelfde zodra je inlogt. Geen GitHub-token meer nodig; staat standaard aan en kun je uitzetten in ⚙ Instellingen. Je inlog gaat nooit mee, en modlog en grafiek ouder dan 90 dagen worden opgeschoond. Op je telefoon doet de sync niet mee.</li>
             <li><b>Streamtitel</b> staat weer in beeld: in de kop van het streamblok zie je naast de game ook de titel van de stream (volledig in de tooltip).</li>
             <li><b>Bovenbalk opnieuw ingedeeld</b>: links Twitch/Multi, + Zone en ⚡ Sneltoetsen; rechts 🔔, ❓ en Modlog, met het ☁-wolkje naast je online-stip.</li>
             <li><b>🎨 Personaliseer</b> rechts in de tabbladbalk: ▦ Netjes schikken, ✎ Indeling en ▣ Eigen indeling zitten nu samen in één uitklapmenu, zodat de bovenbalk rustiger is.</li>
@@ -4611,7 +4611,9 @@
   const SYNC_SLOW = { vhist: 10 * 60e3, raids: 10 * 60e3 };   // grafiek verandert elke minuut: hooguit elke 10 minuten
   const DAY = 86400e3;
   const syncOff = () => { try { return localStorage.getItem('r5sync.off') === '1'; } catch { return false; } };
-  const syncActive = () => !syncOff() && !!state.me && !!state.token;
+  // telefoons en tablets doen niet mee: daar is synchroniseren niet nodig (Dave)
+  const SYNC_DEVICE = !/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  const syncActive = () => SYNC_DEVICE && !syncOff() && !!state.me && !!state.token;
   const syncVers = () => { try { return JSON.parse(localStorage.getItem('r5sync.vers') || 'null'); } catch { return null; } };
   const setSyncVers = (v) => { try { localStorage.setItem('r5sync.vers', JSON.stringify({ ...v, user: state.me.user_id })); } catch {} };
   const rawGet = (k) => { try { return localStorage.getItem('modv.' + k); } catch { return null; } };
@@ -4668,6 +4670,7 @@
   }
   function renderSync(st) {
     if (st != null) twSync.st = st;
+    $('#syncBox').hidden = !SYNC_DEVICE;
     const at = +(localStorage.getItem('r5sync.at') || 0);
     $('#syncOn').checked = !syncOff();
     $('#syncNow').disabled = $('#syncWipe').disabled = !syncActive();
